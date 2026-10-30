@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>스터디 출결 체크</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a2f3a;
+  --fg:#e9ecf2; --mut:#9aa3b2; --dim:#6b7383;
+  --green:#28c76f; --red:#ea4f58; --amber:#f0a92e; --blue:#4a8cf7;
+  --r:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--fg);font-family:'Noto Sans KR',system-ui,-apple-system,sans-serif;font-size:15px;line-height:1.55;-webkit-text-size-adjust:100%}
+button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+.wrap{max-width:1120px;margin:0 auto;padding:18px 16px 80px}
+.hide{display:none !important}
+
+header.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.brand{font-weight:900;font-size:20px;letter-spacing:-.4px}
+.brand .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--green);margin-right:8px;vertical-align:2px}
+.period{color:var(--mut);font-size:13px}
+.spacer{flex:1}
+.who{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mut);flex-wrap:wrap}
+.chip{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:12.5px;color:var(--fg)}
+.chip.admin{border-color:#6b4bd6;background:#2a2244;color:#cdc0ff;font-weight:700}
+.hbtn{background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:6px 13px;font-size:12.5px;font-weight:500}
+.hbtn.on{background:var(--fg);color:#13161b;border-color:var(--fg);font-weight:700}
+.linkbtn{color:var(--mut);font-size:12.5px;text-decoration:underline;text-underline-offset:3px}
+
+.wknav{display:flex;align-items:center;gap:10px;margin:16px 0 10px}
+.wknav button{width:34px;height:34px;border-radius:10px;background:var(--panel);border:1px solid var(--line);color:var(--fg);font-size:15px;line-height:1}
+.wknav button:disabled{opacity:.3;cursor:not-allowed}
+.wknav .lab{font-size:13.5px;font-weight:700}
+.wknav .lab span{color:var(--mut);font-weight:400;font-size:12.5px;margin-left:7px}
+
+nav.tabs{display:flex;gap:6px;overflow-x:auto;margin:0 0 18px;padding-bottom:4px;scrollbar-width:none}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs button{white-space:nowrap;padding:9px 15px;border-radius:999px;background:var(--panel);border:1px solid var(--line);color:var(--mut);font-size:13.5px;font-weight:500}
+nav.tabs button.on{background:var(--fg);color:#13161b;border-color:var(--fg);font-weight:700}
+nav.tabs button:disabled{opacity:.32;cursor:not-allowed}
+nav.tabs button .sub{font-size:11px;opacity:.7;margin-left:5px}
+nav.tabs button.sun{color:#e08a90}
+nav.tabs button.sun.on{background:#e08a90;border-color:#e08a90;color:#171a21}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:14px}
+.card h3{margin:0 0 12px;font-size:15px;font-weight:700}
+.muted{color:var(--mut)} .small{font-size:12.5px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+label.fl{display:block;font-size:12.5px;color:var(--mut);margin:0 0 5px}
+input[type=text],input[type=password],input[type=date],select,textarea{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%;outline:none}
+textarea{min-height:120px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.5}
+input:focus,select:focus,textarea:focus{border-color:var(--blue)}
+.btn{background:var(--blue);color:#fff;border-radius:10px;padding:10px 16px;font-weight:700;font-size:14px}
+.btn.ghost{background:var(--panel2);border:1px solid var(--line);color:var(--fg);font-weight:500}
+.btn.red{background:var(--red)}
+.btn.sm{padding:7px 12px;font-size:13px;border-radius:9px}
+.btn:disabled{opacity:.42;cursor:not-allowed}
+code{background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:12.5px}
+pre{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:12px;overflow-x:auto;font-size:12px;line-height:1.5}
+ol.steps{padding-left:20px;margin:0}
+ol.steps li{margin-bottom:10px}
+
+.gate{max-width:440px;margin:6vh auto 0}
+.setup{max-width:680px;margin:4vh auto 0}
+.gate .title,.setup .title{font-size:26px;font-weight:900;text-align:center;letter-spacing:-.5px}
+.gate .sub,.setup .sub{text-align:center;color:var(--mut);font-size:13.5px;margin:6px 0 22px}
+.memlist{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}
+.memlist button{padding:8px 13px;border-radius:999px;background:var(--panel2);border:1px solid var(--line);font-size:13.5px}
+.memlist button.on{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:700}
+.err{color:var(--red);font-size:12.5px;margin-top:8px;min-height:18px}
+
+.cd{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:linear-gradient(180deg,#1b2030,#171a21);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;margin-bottom:14px}
+.cd .lab{font-size:12.5px;color:var(--mut)}
+.cd .clock{font-size:28px;font-weight:900;letter-spacing:-1px;font-variant-numeric:tabular-nums}
+.cd .clock.warn{color:var(--amber)}
+.cd .clock.over{color:var(--red);font-size:20px}
+.cd .due{font-size:12.5px;color:var(--dim)}
+
+.mcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px;margin-bottom:10px}
+.mcard.me{border-color:#39507e;background:#161b26}
+.mhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.mname{font-weight:700} .mnick{color:var(--dim);font-size:12.5px}
+.badge{font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;display:inline-flex;align-items:center;gap:6px}
+.badge i{width:8px;height:8px;border-radius:50%;background:currentColor;display:inline-block}
+.b-present{background:rgba(40,199,111,.14);color:var(--green)}
+.b-absent{background:rgba(234,79,88,.14);color:var(--red)}
+.b-wait{background:rgba(240,169,46,.14);color:var(--amber)}
+.b-free{background:rgba(74,140,247,.14);color:var(--blue)}
+.b-none{background:var(--panel2);color:var(--dim)}
+.badge.ovr::after{content:'관리자';font-size:9.5px;opacity:.75;margin-left:2px}
+.subs{display:flex;flex-wrap:wrap;gap:7px;margin:11px 0 0}
+.subs .nos{color:var(--dim);font-size:12.5px}
+.sub-pill{display:inline-flex;align-items:center;gap:7px;background:var(--panel2);border:1px solid var(--line);border-radius:999px;padding:5px 11px 5px 9px;font-size:12.5px}
+.sub-pill.off{opacity:.45;text-decoration:line-through}
+.sub-pill.ex{opacity:.4}
+.sub-pill input{accent-color:var(--amber);width:14px;height:14px;margin:0}
+.sub-pill .tag{font-size:10px;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:0 4px}
+.photorow{display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap}
+.thumb{width:84px;height:84px;border-radius:10px;object-fit:cover;border:1px solid var(--line);background:var(--panel2);cursor:zoom-in}
+.ph-empty{width:84px;height:84px;border-radius:10px;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:11.5px;text-align:center}
+.lock{font-size:11.5px;color:var(--dim)}
+
+.board{overflow-x:auto}
+table.bd{border-collapse:separate;border-spacing:0;font-size:12.5px;min-width:100%}
+table.bd th,table.bd td{padding:7px 6px;text-align:center;border-bottom:1px solid var(--line);white-space:nowrap}
+table.bd th{color:var(--mut);font-weight:500;font-size:11.5px;background:var(--panel)}
+table.bd td.nm,table.bd th.nm{text-align:left;position:sticky;left:0;background:var(--panel);z-index:2;padding-right:14px}
+table.bd th.nm{z-index:3}
+table.bd tr:hover td,table.bd tr:hover td.nm{background:#1b1f27}
+.wkblock{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:12px;background:var(--panel2)}
+.wkblock .wh{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+.wkblock .wh b{font-size:13.5px}
+.wkblock.cur{border-color:#39507e}
+.wkblock table.bd th,.wkblock table.bd td.nm{background:var(--panel2)}
+.wkblock table.bd tr:hover td,.wkblock table.bd tr:hover td.nm{background:#242935}
+.cell{display:inline-flex;width:22px;height:22px;border-radius:7px;align-items:center;justify-content:center;font-size:10px;font-weight:700}
+.c-present{background:rgba(40,199,111,.18);color:var(--green)}
+.c-absent{background:rgba(234,79,88,.18);color:var(--red)}
+.c-wait{background:rgba(240,169,46,.16);color:var(--amber)}
+.c-free{background:rgba(74,140,247,.16);color:var(--blue)}
+.c-none{background:#20242d;color:#4b5261}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin-top:12px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sumrow{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--mut);margin-top:4px}
+.sumrow b{color:var(--fg)}
+
+.dayblock{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px;background:var(--panel2)}
+.dayblock .dh{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.dayblock .dh b{font-size:14px}
+.sgrid{display:flex;flex-direction:column;gap:7px}
+.srow{display:flex;gap:8px;align-items:center}
+.srow input[type=text]{flex:1}
+.exbtn{border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:9px 12px;font-size:12.5px;color:var(--mut);white-space:nowrap}
+.exbtn.on{background:rgba(240,169,46,.16);border-color:#6a5420;color:var(--amber);font-weight:700}
+.delx{border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:9px 11px;color:var(--dim)}
+.addsub{font-size:12.5px;color:var(--blue);margin-top:8px}
+
+.modal{position:fixed;inset:0;background:rgba(5,7,11,.82);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50}
+.modal img{max-width:100%;max-height:82vh;border-radius:12px}
+.modal .box{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:18px;max-width:420px;width:100%}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:#eef1f6;color:#13161b;padding:11px 18px;border-radius:999px;font-size:13.5px;font-weight:700;z-index:60;box-shadow:0 8px 28px rgba(0,0,0,.5)}
+.sel{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:6px 9px;font-size:12px}
+@media(max-width:560px){
+  .wrap{padding:14px 12px 70px}
+  .cd .clock{font-size:23px}
+  .thumb,.ph-empty{width:72px;height:72px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ===== 설정 안내 (Firebase 미연결 시) ===== -->
+  <section id="setup" class="setup hide">
+    <div class="title">첫 설정이 필요합니다</div>
+    <div class="sub">출결과 사진을 보관할 무료 저장소(Firebase)를 한 번만 연결하면 됩니다</div>
+    <div class="card">
+      <h3>설정 순서</h3>
+      <ol class="steps small">
+        <li><a href="https://console.firebase.google.com" target="_blank" style="color:var(--blue)">console.firebase.google.com</a> 접속 → <b>프로젝트 추가</b> (이름은 자유, 애널리틱스는 꺼도 됩니다)</li>
+        <li>왼쪽 <b>빌드 → Firestore Database</b> → <b>데이터베이스 만들기</b> → 위치는 <code>asia-northeast3</code> → <b>테스트 모드로 시작</b></li>
+        <li>왼쪽 <b>빌드 → Authentication</b> → <b>시작하기</b> → <b>익명</b> 선택 → <b>사용 설정</b> 후 저장
+          <div class="muted" style="margin-top:4px">이 사이트에 들어온 사람만 데이터를 읽고 쓰게 만드는 장치입니다. 스터디원이 따로 로그인할 일은 없습니다.</div></li>
+        <li><b>Firestore Database → 규칙</b> 탭에서 아래 내용으로 바꾸고 <b>게시</b>
+          <pre>rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{doc=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}</pre></li>
+        <li>프로젝트 개요 옆 <b>톱니바퀴 → 프로젝트 설정</b> → 아래 <b>내 앱</b>에서 <b>&lt;/&gt;</b>(웹) 선택 → 앱 등록 → 나오는 <code>firebaseConfig</code> 중괄호 안의 내용을 복사</li>
+        <li>복사한 값을 아래에 붙여넣으세요. <b>index.html 파일의 맨 윗부분 FIREBASE_CONFIG에 같은 값을 넣어 두면</b> 다른 사람들도 바로 쓸 수 있습니다.</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>firebaseConfig 붙여넣기</h3>
+      <textarea id="cfgPaste" placeholder='{
+  apiKey: "AIza...",
+  authDomain: "xxx.firebaseapp.com",
+  projectId: "xxx",
+  storageBucket: "xxx.appspot.com",
+  messagingSenderId: "123456",
+  appId: "1:123:web:abc"
+}'></textarea>
+      <div class="err" id="cfgErr"></div>
+      <div class="row"><button class="btn" id="cfgSave">연결하기</button></div>
+      <div class="muted small" style="margin-top:10px">
+        붙여넣은 값은 이 브라우저에만 저장됩니다. 스터디원 모두가 쓰려면 index.html 파일에 직접 넣은 뒤 다시 올려 주세요.
+      </div>
+    </div>
+    <div class="small" style="color:var(--dim);text-align:center">
+      위 규칙은 링크를 아는 사람이면 데이터를 읽고 쓸 수 있는 상태입니다. 개인 비밀번호는 서로를 구분하는 간단한 장치이지 보안 장치가 아니니, 민감한 사진이나 정보는 올리지 마세요.
+    </div>
+  </section>
+
+  <!-- ===== GATE ===== -->
+  <section id="gate" class="gate hide">
+    <div class="title">스터디 출결 체크</div>
+    <div class="sub" id="gateSub">개인 비밀번호로 입장합니다</div>
+    <div class="card" id="loginCard">
+      <h3>입장하기</h3>
+      <div id="noMem" class="muted small hide" style="margin-bottom:10px">아직 등록된 참가자가 없습니다. 아래에서 먼저 등록해 주세요.</div>
+      <label class="fl">참가자 선택</label>
+      <div class="memlist" id="memList"></div>
+      <label class="fl">개인 비밀번호</label>
+      <input type="password" id="pwIn" placeholder="비밀번호 입력" autocomplete="off">
+      <div class="err" id="loginErr"></div>
+      <div class="row" style="margin-top:4px">
+        <button class="btn" id="loginBtn">입장</button>
+        <button class="btn ghost" id="toReg">새 참가자 등록</button>
+      </div>
+    </div>
+    <div class="card hide" id="regCard">
+      <h3>새 참가자 등록</h3>
+      <label class="fl">이름</label>
+      <input type="text" id="rName" placeholder="홍길동" autocomplete="off">
+      <label class="fl" style="margin-top:10px">별명</label>
+      <input type="text" id="rNick" placeholder="길동쌤" autocomplete="off">
+      <label class="fl" style="margin-top:10px">개인 비밀번호</label>
+      <input type="password" id="rPw" placeholder="4자 이상" autocomplete="new-password">
+      <label class="fl" style="margin-top:10px">비밀번호 확인</label>
+      <input type="password" id="rPw2" placeholder="다시 입력" autocomplete="new-password">
+      <div class="err" id="regErr"></div>
+      <div class="row" style="margin-top:4px">
+        <button class="btn" id="regBtn">등록하고 입장</button>
+        <button class="btn ghost" id="toLogin">돌아가기</button>
+      </div>
+      <div class="small muted" style="margin-top:10px">등록 후 상단 <b>내 정보</b>에서 요일별 과목을 입력하세요. 이름·별명·시간표는 언제든 수정할 수 있습니다.</div>
+    </div>
+    <div class="small" style="text-align:center;color:var(--dim);margin-top:14px">
+      비밀번호는 출결 확인용 간단한 구분 장치입니다. 다른 곳에서 쓰는 비밀번호는 사용하지 마세요.
+    </div>
+  </section>
+
+  <!-- ===== APP ===== -->
+  <div id="app" class="hide">
+    <header class="top">
+      <div class="brand"><span class="dot"></span><span id="siteTitle">스터디 출결 체크</span></div>
+      <div class="period" id="periodLab"></div>
+      <div class="spacer"></div>
+      <div class="who">
+        <span class="chip" id="meChip"></span>
+        <button class="hbtn" id="meBtn">내 정보</button>
+        <button class="hbtn hide" id="adminBtn">관리자</button>
+        <button class="linkbtn" id="logoutBtn">나가기</button>
+      </div>
+    </header>
+    <div class="wknav" id="wknav"></div>
+    <nav class="tabs" id="tabs"></nav>
+    <div id="view"></div>
+  </div>
+
+</div>
+
+<script type="module">
+/* ============================================================
+   스터디 출결 체크 — 독립 웹사이트 버전 (Firebase Firestore)
+
+   ▼▼▼ 여기에 Firebase 설정값을 넣으세요 ▼▼▼
+   Firebase 콘솔 → 프로젝트 설정 → 내 앱 → 웹 앱의 firebaseConfig
+   ============================================================ */
+const FIREBASE_CONFIG = {
+  // apiKey: "AIza....",
+  // authDomain: "your-project.firebaseapp.com",
+  // projectId: "your-project",
+  // storageBucket: "your-project.appspot.com",
+  // messagingSenderId: "000000000000",
+  // appId: "1:000000000000:web:xxxxxxxxxxxx"
+};
+/* ▲▲▲ 여기까지 ▲▲▲ */
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {
+  getFirestore, doc, collection, query, where,
+  onSnapshot, setDoc, deleteDoc, getDocs
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+const DAY_KO  = ['일','월','화','수','목','금','토'];
+const DAY_KEY = ['sun','mon','tue','wed','thu','fri','sat'];
+const ADMIN_PW = '9684';
+const LS  = 'studyatt.me.v1';
+const LSC = 'studyatt.fbcfg.v1';
+
+let fs=null;
+let MEM=[], REC={}, PHOTO={};
+let CFG={title:'스터디 출결 체크',startDate:null,endDate:null};
+let me=null, isAdmin=false, tab='board', wkStart=null;
+let cdTimer=null, photoUnsub=null, photoDate=null;
+
+/* ---------- KST ---------- */
+const fmtDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'});
+const todayKST=()=>fmtDate.format(new Date());
+const dowOf=ds=>new Date(ds+'T12:00:00+09:00').getUTCDay();
+const addDays=(ds,n)=>fmtDate.format(new Date(new Date(ds+'T12:00:00+09:00').getTime()+n*864e5));
+const deadlineOf=ds=>new Date(addDays(ds,1)+'T02:00:00+09:00').getTime();
+const mondayOf=ds=>{const d=dowOf(ds);return addDays(ds,d===0?-6:1-d);};
+const mmdd=ds=>ds.slice(5).replace('-','/');
+function dateRange(){
+  const out=[]; if(!CFG.startDate||!CFG.endDate) return out;
+  let d=CFG.startDate,g=0; while(d<=CFG.endDate&&g++<800){out.push(d);d=addDays(d,1);} return out;
+}
+function weeks(){
+  if(!CFG.startDate||!CFG.endDate) return [];
+  const out=[]; let s=mondayOf(CFG.startDate),g=0;
+  while(s<=CFG.endDate&&g++<120){
+    const days=[]; for(let i=0;i<7;i++) days.push(addDays(s,i));
+    out.push({start:s,end:addDays(s,6),idx:out.length+1,days}); s=addDays(s,7);
+  }
+  return out;
+}
+const inPeriod=ds=>!!(CFG.startDate&&CFG.endDate&&ds>=CFG.startDate&&ds<=CFG.endDate);
+function curWeek(){
+  const ws=weeks(); if(!ws.length) return null;
+  if(!wkStart) wkStart=inPeriod(todayKST())?mondayOf(todayKST()):ws[0].start;
+  return ws.find(w=>w.start===wkStart)||ws[0];
+}
+
+/* ---------- misc ---------- */
+async function sha(s){
+  const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));
+  return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+function banner(title,html){
+  const d=document.createElement('div');
+  d.className='card';
+  d.style.cssText='border-color:#7a3a3f;background:#241a1c';
+  d.innerHTML=`<h3 style="color:var(--red)">${esc(title)}</h3><div class="small">${html}</div>`;
+  const w=document.querySelector('.wrap'); w.insertBefore(d,w.firstChild);
+}
+function toast(msg){
+  document.querySelectorAll('.toast').forEach(t=>t.remove());
+  const t=document.createElement('div'); t.className='toast'; t.textContent=msg;
+  document.body.appendChild(t); setTimeout(()=>t.remove(),2600);
+}
+const rkey=(mid,ds)=>mid+'__'+ds;
+const recOf=(mid,ds)=>REC[rkey(mid,ds)]||null;
+const memById=id=>MEM.find(m=>m.id===id)||null;
+function subjectsOf(m,ds){
+  const a=(m.subjects&&m.subjects[DAY_KEY[dowOf(ds)]])||[]; return Array.isArray(a)?a:[];
+}
+
+/* ---------- 상태 ---------- */
+function statusOf(m,ds){
+  const dow=dowOf(ds), r=recOf(m.id,ds), hasPhoto=!!(r&&r.hasPhoto);
+  if(dow===0) return {s:'none',label:hasPhoto?'사진 있음':'—'};
+  if(r&&r.override){
+    const map={present:'출석',absent:'결석',free:'공강'};
+    return {s:r.override,label:map[r.override]||r.override,ovr:true};
+  }
+  const active=subjectsOf(m,ds).filter(s=>s&&s.n&&!s.ex);
+  if(!active.length) return {s:'free',label:'공강',reason:'과목 없음'};
+  const cancelled=(r&&r.cancelled)||{};
+  if(!active.filter(s=>!cancelled[s.n]).length) return {s:'free',label:'공강',reason:'전 과목 휴강'};
+  if(hasPhoto) return {s:'present',label:'출석'};
+  if(Date.now()<deadlineOf(ds)) return {s:'wait',label:'미인증'};
+  return {s:'absent',label:'결석'};
+}
+const isLocked=ds=>Date.now()>=deadlineOf(ds)&&!isAdmin;
+
+/* ---------- 저장 ---------- */
+async function saveRec(mid,ds,patch){
+  const k=rkey(mid,ds);
+  const base=REC[k]||{memberId:mid,date:ds,cancelled:{},hasPhoto:false,override:null};
+  const next=Object.assign({},base,patch);
+  if(patch.cancelled) next.cancelled=Object.assign({},base.cancelled||{},patch.cancelled);
+  Object.keys(next.cancelled||{}).forEach(x=>{ if(!next.cancelled[x]) delete next.cancelled[x]; });
+  REC[k]=next; render();
+  try{ await setDoc(doc(fs,'records',k),next); return true; }
+  catch(e){ toast('저장 실패 — 인터넷 연결이나 Firestore 규칙을 확인해 주세요'); return false; }
+}
+async function saveMember(m){
+  const {id,...body}=m;
+  try{ await setDoc(doc(fs,'members',id),body); return true; }
+  catch(e){ toast('저장 실패'); return false; }
+}
+async function saveCfg(patch){
+  Object.assign(CFG,patch);
+  try{ await setDoc(doc(fs,'config','settings'),{title:CFG.title,startDate:CFG.startDate,endDate:CFG.endDate}); return true; }
+  catch(e){ toast('설정 저장 실패'); return false; }
+}
+async function deleteMember(m){
+  try{
+    const snap=await getDocs(query(collection(fs,'records'),where('memberId','==',m.id)));
+    for(const d of snap.docs) await deleteDoc(d.ref);
+    const ps=await getDocs(query(collection(fs,'photos'),where('memberId','==',m.id)));
+    for(const d of ps.docs) await deleteDoc(d.ref);
+    await deleteDoc(doc(fs,'members',m.id));
+    if(me===m.id){ me=null; try{localStorage.removeItem(LS);}catch(e){} }
+    toast(`${m.name} 계정과 출결 기록을 삭제했습니다`); return true;
+  }catch(e){ toast('삭제 실패'); return false; }
+}
+
+/* ---------- 사진 ---------- */
+async function shrink(file){
+  const bmp=await createImageBitmap(file);
+  const max=900, sc=Math.min(1,max/Math.max(bmp.width,bmp.height));
+  const c=document.createElement('canvas');
+  c.width=Math.max(1,Math.round(bmp.width*sc)); c.height=Math.max(1,Math.round(bmp.height*sc));
+  c.getContext('2d').drawImage(bmp,0,0,c.width,c.height);
+  bmp.close&&bmp.close();
+  let q=.8,url=c.toDataURL('image/jpeg',q);
+  while(url.length*0.75>160000&&q>0.3){ q-=0.1; url=c.toDataURL('image/jpeg',q); }
+  return url;
+}
+async function uploadPhoto(mid,ds,file){
+  if(!file) return;
+  if(!/^image\//.test(file.type)) return toast('이미지 파일만 올릴 수 있습니다');
+  toast('사진 처리 중…');
+  let src;
+  try{ src=await shrink(file); }catch(e){ return toast('사진을 읽을 수 없습니다'); }
+  const k=rkey(mid,ds);
+  try{ await setDoc(doc(fs,'photos',k),{memberId:mid,date:ds,src,at:new Date().toISOString()}); }
+  catch(e){ return toast('사진 업로드 실패 — 용량을 줄여 다시 시도해 주세요'); }
+  PHOTO[k]={src};
+  if(await saveRec(mid,ds,{hasPhoto:true})) toast(dowOf(ds)===0?'사진이 등록되었습니다':'출석 인증 완료');
+}
+async function removePhoto(mid,ds){
+  const k=rkey(mid,ds);
+  try{ await deleteDoc(doc(fs,'photos',k)); }catch(e){}
+  delete PHOTO[k];
+  if(await saveRec(mid,ds,{hasPhoto:false})) toast('사진을 삭제했습니다');
+}
+function watchPhotos(ds){
+  if(photoDate===ds) return;
+  if(photoUnsub){ photoUnsub(); photoUnsub=null; }
+  photoDate=ds; PHOTO={};
+  if(!ds||!fs) return;
+  photoUnsub=onSnapshot(query(collection(fs,'photos'),where('date','==',ds)),snap=>{
+    const next={}; snap.forEach(d=>next[d.id]=d.data()); PHOTO=next; paintPhotos();
+  },()=>{});
+}
+function paintPhotos(){
+  document.querySelectorAll('[data-ph]').forEach(el=>{
+    const p=PHOTO[el.dataset.ph];
+    if(p&&p.src) el.outerHTML=`<img class="thumb" src="${esc(p.src)}" alt="인증 사진" data-act="zoom" data-ph="${el.dataset.ph}">`;
+  });
+  document.querySelectorAll('[data-act="zoom"]').forEach(img=>img.onclick=()=>{
+    const d=document.createElement('div'); d.className='modal';
+    d.innerHTML=`<img src="${img.getAttribute('src')}" alt="인증 사진 크게 보기">`;
+    d.onclick=()=>d.remove(); document.body.appendChild(d);
+  });
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function render(){
+  if(!fs){ return; }
+  if(!me&&!isAdmin){ renderGate(); return; }
+  document.getElementById('setup').classList.add('hide');
+  document.getElementById('gate').classList.add('hide');
+  document.getElementById('app').classList.remove('hide');
+  document.getElementById('siteTitle').textContent=CFG.title||'스터디 출결 체크';
+  document.getElementById('periodLab').textContent=
+    (CFG.startDate&&CFG.endDate)?`기간 ${CFG.startDate} ~ ${CFG.endDate}`:'기간 미설정 (관리자 설정 필요)';
+
+  const m=memById(me), chip=document.getElementById('meChip');
+  chip.textContent=isAdmin?(m?`관리자 · ${m.name}`:'관리자 모드'):`${m?m.name:''}${m&&m.nickname?' ('+m.nickname+')':''}`;
+  chip.className='chip'+(isAdmin?' admin':'');
+  const meBtn=document.getElementById('meBtn');
+  meBtn.classList.toggle('hide',!m); meBtn.classList.toggle('on',tab==='me');
+  const adBtn=document.getElementById('adminBtn');
+  adBtn.classList.toggle('hide',!isAdmin); adBtn.classList.toggle('on',tab==='admin');
+
+  renderWeekNav(); renderTabs();
+  const v=document.getElementById('view');
+  if(tab==='board'){ v.innerHTML=viewBoard(); watchPhotos(null); }
+  else if(tab==='me'){ v.innerHTML=viewMe(); watchPhotos(null); }
+  else if(tab==='admin'){ v.innerHTML=viewAdmin(); watchPhotos(null); }
+  else { v.innerHTML=viewDay(tab); watchPhotos(tab); }
+  bindView(); paintPhotos(); startCountdown();
+}
+
+function renderWeekNav(){
+  const nav=document.getElementById('wknav'), ws=weeks(), w=curWeek();
+  if(!w||tab==='me'||tab==='admin'){ nav.innerHTML=''; nav.classList.add('hide'); return; }
+  nav.classList.remove('hide');
+  const i=ws.findIndex(x=>x.start===w.start);
+  const isCur=inPeriod(todayKST())&&mondayOf(todayKST())===w.start;
+  nav.innerHTML=`
+    <button id="wkPrev" ${i<=0?'disabled':''} title="이전 주">‹</button>
+    <button id="wkNext" ${i>=ws.length-1?'disabled':''} title="다음 주">›</button>
+    <div class="lab">${w.idx}주차 <span>${mmdd(w.start)} (월) ~ ${mmdd(w.end)} (일)</span></div>
+    ${isCur?'':`<button class="hbtn" id="wkToday" style="margin-left:auto">이번 주로</button>`}`;
+  const go=d=>{
+    const t=ws[i+d]; if(!t) return;
+    if(tab!=='board'){
+      const k=dowOf(tab), nd=t.days[k===0?6:k-1];
+      tab=inPeriod(nd)?nd:(t.days.find(x=>inPeriod(x))||'board');
+    }
+    wkStart=t.start; render();
+  };
+  const pv=nav.querySelector('#wkPrev'), nx=nav.querySelector('#wkNext'), td=nav.querySelector('#wkToday');
+  if(pv) pv.onclick=()=>go(-1);
+  if(nx) nx.onclick=()=>go(1);
+  if(td) td.onclick=()=>{ wkStart=mondayOf(todayKST()); if(tab!=='board') tab=todayKST(); render(); };
+}
+
+function renderTabs(){
+  const nav=document.getElementById('tabs'), w=curWeek(), today=todayKST();
+  let btns=`<button data-tab="board" class="${tab==='board'?'on':''}">전체 현황</button>`;
+  if(w) w.days.forEach(d=>{
+    const dw=dowOf(d), ok=inPeriod(d);
+    btns+=`<button data-tab="${d}" class="${tab===d?'on':''} ${dw===0?'sun':''}" ${ok?'':'disabled'} title="${ok?'':'스터디 기간 외'}">
+      ${DAY_KO[dw]}<span class="sub">${mmdd(d)}${d===today?' ·오늘':''}</span></button>`;
+  });
+  nav.innerHTML=btns;
+  nav.querySelectorAll('button').forEach(b=>b.onclick=()=>{ tab=b.dataset.tab; render(); });
+  const on=nav.querySelector('button.on'); on&&on.scrollIntoView({inline:'center',block:'nearest'});
+}
+
+function viewBoard(){
+  const ws=weeks();
+  if(!MEM.length) return `<div class="card"><h3>전체 현황</h3><div class="muted small">참가자가 없습니다.</div></div>`;
+  if(!ws.length) return `<div class="card"><h3>전체 현황</h3><div class="muted small">관리자가 스터디 기간을 설정하면 현황표가 표시됩니다.</div></div>`;
+  const today=todayKST(), tot={};
+  MEM.forEach(m=>tot[m.id]={present:0,absent:0,free:0});
+  dateRange().filter(d=>dowOf(d)!==0).forEach(d=>MEM.forEach(m=>{
+    const s=statusOf(m,d).s; if(tot[m.id][s]!==undefined) tot[m.id][s]++;
+  }));
+  let sum=`<div class="card"><h3>누적 집계 <span class="muted small" style="font-weight:400">· 참가자 ${MEM.length}명 · ${ws.length}주</span></h3>
+    <div class="board"><table class="bd"><thead><tr><th class="nm">참가자</th><th>출석</th><th>결석</th><th>공강</th></tr></thead><tbody>`;
+  MEM.forEach(m=>{
+    sum+=`<tr><td class="nm"><b>${esc(m.name)}</b>${m.nickname?` <span class="mnick">${esc(m.nickname)}</span>`:''}</td>
+      <td><b style="color:var(--green)">${tot[m.id].present}</b></td>
+      <td><b style="color:var(--red)">${tot[m.id].absent}</b></td>
+      <td><b style="color:var(--blue)">${tot[m.id].free}</b></td></tr>`;
+  });
+  sum+=`</tbody></table></div></div>`;
+
+  let blocks='';
+  ws.forEach(w=>{
+    const days=w.days.filter(d=>inPeriod(d)&&dowOf(d)!==0);
+    if(!days.length) return;
+    const isCur=inPeriod(today)&&mondayOf(today)===w.start;
+    let head=`<th class="nm">참가자</th>`;
+    days.forEach(d=>head+=`<th${d===today?' style="color:var(--fg);font-weight:700"':''}>${DAY_KO[dowOf(d)]}<br><span style="font-size:10px;opacity:.7">${mmdd(d)}</span></th>`);
+    let rows='';
+    MEM.forEach(m=>{
+      let tds=`<td class="nm">${esc(m.name)}</td>`;
+      days.forEach(d=>{
+        const st=statusOf(m,d);
+        const sym={present:'출',absent:'결',free:'공',wait:'·',none:''}[st.s]||'';
+        tds+=`<td><span class="cell c-${st.s}" title="${mmdd(d)} ${st.label}">${sym}</span></td>`;
+      });
+      rows+=`<tr>${tds}</tr>`;
+    });
+    blocks+=`<div class="wkblock ${isCur?'cur':''}">
+      <div class="wh"><b>${w.idx}주차</b><span class="muted small">${mmdd(w.start)} ~ ${mmdd(w.end)}</span>${isCur?'<span class="badge b-present"><i></i>이번 주</span>':''}</div>
+      <div class="board"><table class="bd"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  });
+
+  return sum+`<div class="card"><h3>주별 출결</h3>${blocks}
+    <div class="legend">
+      <span><span class="cell c-present">출</span> 출석(사진 인증)</span>
+      <span><span class="cell c-absent">결</span> 결석(기한 초과)</span>
+      <span><span class="cell c-free">공</span> 공강(전 과목 휴강·과목 없음)</span>
+      <span><span class="cell c-wait">·</span> 인증 대기(기한 전)</span>
+    </div>
+    <div class="sumrow" style="margin-top:10px">일요일은 출결 집계에서 제외됩니다. 기한은 각 요일 <b>익일 02:00</b>입니다.</div></div>`;
+}
+
+function viewDay(ds){
+  const dow=dowOf(ds), isSun=dow===0, locked=isLocked(ds);
+  let html='';
+  if(!isSun){
+    html+=`<div class="cd"><div>
+      <div class="lab">${mmdd(ds)} (${DAY_KO[dow]}) 사진 업로드 마감까지</div>
+      <div class="clock" id="cdClock">--:--:--</div></div>
+      <div class="spacer"></div>
+      <div class="due">마감 ${mmdd(addDays(ds,1))} 02:00<br><span id="cdNote" class="muted"></span></div></div>`;
+  }else{
+    html+=`<div class="card"><h3>${mmdd(ds)} (일)</h3><div class="muted small">일요일은 출결·공강을 집계하지 않습니다. 사진은 자유롭게 올릴 수 있습니다.</div></div>`;
+  }
+  if(!MEM.length) return html+`<div class="card muted small">참가자가 없습니다.</div>`;
+
+  [...MEM].sort((a,b)=>(a.id===me?-1:b.id===me?1:0)).forEach(m=>{
+    const st=statusOf(m,ds), r=recOf(m.id,ds), subs=subjectsOf(m,ds);
+    const cancelled=(r&&r.cancelled)||{}, mine=m.id===me, canEdit=(mine&&!locked)||isAdmin;
+    const k=rkey(m.id,ds), hasPhoto=!!(r&&r.hasPhoto);
+
+    let pills='';
+    if(!subs.length) pills=`<span class="nos">등록된 과목이 없습니다${mine?' — 상단 내 정보에서 추가':''}</span>`;
+    else subs.forEach(s=>{
+      if(!s||!s.n) return;
+      const off=!!cancelled[s.n];
+      pills+=`<label class="sub-pill ${s.ex?'ex':''} ${off?'off':''}">
+        <input type="checkbox" data-act="cancel" data-m="${m.id}" data-d="${ds}" data-n="${esc(s.n)}" ${off?'checked':''} ${(canEdit&&!s.ex&&!isSun)?'':'disabled'}>
+        <span>${esc(s.n)}</span>${s.ex?`<span class="tag">제외</span>`:''}</label>`;
+    });
+
+    const ph = hasPhoto
+      ? `<div class="ph-empty" data-ph="${k}">불러오는<br>중…</div>`
+      : `<div class="ph-empty">사진<br>없음</div>`;
+
+    let ctrl='';
+    if(canEdit){
+      ctrl+=`<label class="btn sm ghost" style="display:inline-block">${hasPhoto?'사진 교체':'사진 올리기'}
+        <input type="file" accept="image/*" class="hide" data-act="upload" data-m="${m.id}" data-d="${ds}"></label>`;
+      if(hasPhoto) ctrl+=`<button class="btn sm ghost" data-act="rm" data-m="${m.id}" data-d="${ds}">사진 빼기</button>`;
+    }else if(mine&&locked){
+      ctrl+=`<span class="lock">마감(익일 02:00) 이후에는 관리자만 변경할 수 있습니다</span>`;
+    }
+    if(isAdmin&&!isSun){
+      const cur=(r&&r.override)||'';
+      ctrl+=`<select class="sel" data-act="ovr" data-m="${m.id}" data-d="${ds}">
+        <option value="" ${cur===''?'selected':''}>자동 판정</option>
+        <option value="present" ${cur==='present'?'selected':''}>출석으로 지정</option>
+        <option value="absent" ${cur==='absent'?'selected':''}>결석으로 지정</option>
+        <option value="free" ${cur==='free'?'selected':''}>공강으로 지정</option></select>`;
+    }
+
+    html+=`<div class="mcard ${mine?'me':''}">
+      <div class="mhead">
+        <span class="mname">${esc(m.name)}</span>
+        ${m.nickname?`<span class="mnick">${esc(m.nickname)}</span>`:''}
+        <span class="badge b-${st.s} ${st.ovr?'ovr':''}"><i></i>${st.label}</span>
+        ${st.reason?`<span class="small muted">${st.reason}</span>`:''}
+        ${mine?'<span class="small muted">· 나</span>':''}
+      </div>
+      <div class="subs">${pills}</div>
+      <div class="photorow">${ph}${ctrl}</div></div>`;
+  });
+  return html;
+}
+
+function viewMe(){
+  const m=memById(me);
+  if(!m) return `<div class="card muted">관리자 전용 모드로 입장했습니다. 개인 정보는 참가자 계정으로 입장해 수정하세요.</div>`;
+  let days='';
+  for(let d=1;d<=6;d++){
+    const key=DAY_KEY[d], arr=(m.subjects&&m.subjects[key])||[];
+    let rows='';
+    arr.forEach((s,i)=>{
+      rows+=`<div class="srow">
+        <input type="text" value="${esc(s.n||'')}" placeholder="과목명" data-act="subname" data-k="${key}" data-i="${i}">
+        <button class="exbtn ${s.ex?'on':''}" data-act="subex" data-k="${key}" data-i="${i}" title="제외하면 출결 판정에서 무시됩니다">${s.ex?'제외됨':'제외'}</button>
+        <button class="delx" data-act="subdel" data-k="${key}" data-i="${i}">✕</button></div>`;
+    });
+    if(!arr.length) rows=`<div class="muted small">과목 없음 — 이 요일은 공강으로 처리됩니다</div>`;
+    days+=`<div class="dayblock">
+      <div class="dh"><b>${DAY_KO[d]}요일</b><span class="muted small">${arr.filter(s=>s.n&&!s.ex).length}과목 집계</span></div>
+      <div class="sgrid">${rows}</div>
+      <button class="addsub" data-act="subadd" data-k="${key}">+ 과목 추가</button></div>`;
+  }
+  return `<div class="card"><h3>내 정보</h3>
+    <div class="row">
+      <div style="flex:1;min-width:150px"><label class="fl">이름</label><input type="text" id="meName" value="${esc(m.name)}"></div>
+      <div style="flex:1;min-width:150px"><label class="fl">별명</label><input type="text" id="meNick" value="${esc(m.nickname||'')}"></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="btn sm" id="meSave">이름·별명 저장</button>
+      <button class="btn sm ghost" id="mePw">비밀번호 변경</button>
+    </div>
+    <div class="muted small" style="margin-top:10px">언제든 다시 들어와 수정할 수 있습니다.</div></div>
+  <div class="card"><h3>수강 과목 (월~토)</h3>
+    <div class="muted small" style="margin-bottom:12px"><b>제외</b>를 누르면 적어 둔 채로 출결 판정에서 무시됩니다.
+      집계 과목이 하나도 없는 요일은 자동 공강이 됩니다. 과목명은 입력하는 즉시 저장됩니다.</div>
+    ${days}</div>`;
+}
+
+function viewAdmin(){
+  let rows='';
+  MEM.forEach(m=>{
+    const n=Object.keys(REC).filter(k=>REC[k]&&REC[k].memberId===m.id).length;
+    rows+=`<div class="srow" style="padding:9px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:120px"><b>${esc(m.name)}</b> <span class="mnick">${esc(m.nickname||'')}</span>
+        <div class="muted small">기록 ${n}일</div></div>
+      <button class="btn sm ghost" data-act="aresetpw" data-m="${m.id}">비밀번호 초기화</button>
+      <button class="btn sm red" data-act="adel" data-m="${m.id}">계정 삭제</button></div>`;
+  });
+  return `<div class="card"><h3>스터디 기간 설정</h3>
+    <div class="row">
+      <div style="flex:1;min-width:150px"><label class="fl">시작일</label><input type="date" id="cStart" value="${CFG.startDate||''}"></div>
+      <div style="flex:1;min-width:150px"><label class="fl">종료일</label><input type="date" id="cEnd" value="${CFG.endDate||''}"></div>
+    </div>
+    <label class="fl" style="margin-top:10px">스터디 이름</label>
+    <input type="text" id="cTitle" value="${esc(CFG.title||'')}" placeholder="스터디 출결 체크">
+    <div class="row" style="margin-top:12px"><button class="btn sm" id="cSave">기간·이름 저장</button></div>
+    <div class="muted small" style="margin-top:10px">기간은 월요일 시작 기준으로 주 단위로 나뉘어 표시됩니다.</div></div>
+  <div class="card"><h3>출결 변경 권한</h3>
+    <div class="muted small">요일 탭의 각 참가자 카드에서 <b>자동 판정 / 출석 / 결석 / 공강</b>을 직접 지정할 수 있습니다.
+    마감이 지난 날짜의 사진도 관리자 모드에서는 올리고 뺄 수 있습니다.</div></div>
+  <div class="card"><h3>계정 관리 <span class="muted small" style="font-weight:400">· ${MEM.length}명</span></h3>
+    ${rows||'<div class="muted small">참가자가 없습니다.</div>'}
+    <div class="muted small" style="margin-top:12px">계정을 삭제하면 그 사람의 출결 기록과 사진도 함께 지워집니다. 되돌릴 수 없습니다.</div></div>`;
+}
+
+function startCountdown(){
+  if(cdTimer){ clearInterval(cdTimer); cdTimer=null; }
+  if(!document.getElementById('cdClock')) return;
+  const dl=deadlineOf(tab);
+  const tick=()=>{
+    const el=document.getElementById('cdClock'); if(!el){ clearInterval(cdTimer); return; }
+    const note=document.getElementById('cdNote'), ms=dl-Date.now();
+    if(ms<=0){ el.textContent='마감되었습니다'; el.className='clock over';
+      if(note) note.textContent='미인증자는 결석 처리'; return; }
+    const h=Math.floor(ms/36e5), mi=Math.floor(ms%36e5/6e4), s=Math.floor(ms%6e4/1000);
+    el.textContent=`${String(h).padStart(2,'0')}:${String(mi).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    el.className='clock'+(ms<36e5?' warn':'');
+    if(note) note.textContent=ms<36e5?'1시간 미만 남았습니다':'';
+  };
+  tick(); cdTimer=setInterval(tick,1000);
+}
+
+function bindView(){
+  const v=document.getElementById('view');
+  v.querySelectorAll('[data-act="upload"]').forEach(el=>el.onchange=e=>{
+    const f=e.target.files&&e.target.files[0]; uploadPhoto(el.dataset.m,el.dataset.d,f); e.target.value='';
+  });
+  v.querySelectorAll('[data-act="rm"]').forEach(b=>b.onclick=()=>
+    confirmBox('사진을 빼면 출석 인증이 취소됩니다. 계속할까요?',()=>removePhoto(b.dataset.m,b.dataset.d)));
+  v.querySelectorAll('[data-act="cancel"]').forEach(c=>c.onchange=()=>
+    saveRec(c.dataset.m,c.dataset.d,{cancelled:{[c.dataset.n]:c.checked?true:false}}));
+  v.querySelectorAll('[data-act="ovr"]').forEach(s=>s.onchange=()=>
+    saveRec(s.dataset.m,s.dataset.d,{override:s.value||null}));
+
+  const m=memById(me), sv=document.getElementById('meSave');
+  if(sv&&m) sv.onclick=async()=>{
+    const n=document.getElementById('meName').value.trim();
+    if(!n) return toast('이름을 입력해 주세요');
+    m.name=n; m.nickname=document.getElementById('meNick').value.trim();
+    if(await saveMember(m)){ toast('저장했습니다'); render(); }
+  };
+  const pw=document.getElementById('mePw');
+  if(pw&&m) pw.onclick=()=>pwChangeBox(m);
+
+  if(m){
+    v.querySelectorAll('[data-act="subadd"]').forEach(b=>b.onclick=async()=>{
+      const k=b.dataset.k; m.subjects=m.subjects||{}; m.subjects[k]=m.subjects[k]||[];
+      m.subjects[k].push({n:'',ex:false}); await saveMember(m); render();
+    });
+    v.querySelectorAll('[data-act="subdel"]').forEach(b=>b.onclick=async()=>{
+      m.subjects[b.dataset.k].splice(+b.dataset.i,1); await saveMember(m); render();
+    });
+    v.querySelectorAll('[data-act="subex"]').forEach(b=>b.onclick=async()=>{
+      const s=m.subjects[b.dataset.k][+b.dataset.i]; s.ex=!s.ex; await saveMember(m); render();
+    });
+    let t=null;
+    v.querySelectorAll('[data-act="subname"]').forEach(inp=>{
+      inp.oninput=()=>{ m.subjects[inp.dataset.k][+inp.dataset.i].n=inp.value;
+        clearTimeout(t); t=setTimeout(()=>saveMember(m),700); };
+      inp.onblur=()=>{ clearTimeout(t); saveMember(m); };
+    });
+  }
+
+  const cs=document.getElementById('cSave');
+  if(cs) cs.onclick=async()=>{
+    const s=document.getElementById('cStart').value, e=document.getElementById('cEnd').value;
+    if(!s||!e) return toast('시작일과 종료일을 입력해 주세요');
+    if(s>e) return toast('종료일이 시작일보다 빠릅니다');
+    if(await saveCfg({startDate:s,endDate:e,title:document.getElementById('cTitle').value.trim()||'스터디 출결 체크'})){
+      wkStart=null; toast('기간을 저장했습니다'); render();
+    }
+  };
+  v.querySelectorAll('[data-act="adel"]').forEach(b=>b.onclick=()=>{
+    const t=memById(b.dataset.m); if(!t) return;
+    confirmBox(`${t.name} 계정을 삭제합니다. 출결 기록과 사진도 함께 지워지고 되돌릴 수 없습니다.`,async()=>{
+      await deleteMember(t); render();
+    });
+  });
+  v.querySelectorAll('[data-act="aresetpw"]').forEach(b=>b.onclick=()=>{
+    const t=memById(b.dataset.m); if(!t) return;
+    promptBox(`${t.name}의 새 비밀번호`,'4자 이상',async val=>{
+      if(!val||val.length<4) return toast('4자 이상 입력해 주세요');
+      t.pw=await sha(val); if(await saveMember(t)) toast('비밀번호를 변경했습니다');
+    });
+  });
+}
+
+function confirmBox(msg,onOk){
+  const d=document.createElement('div'); d.className='modal';
+  d.innerHTML=`<div class="box"><div style="margin-bottom:16px">${esc(msg)}</div>
+    <div class="row" style="justify-content:flex-end"><button class="btn ghost sm" data-x>취소</button><button class="btn sm" data-ok>확인</button></div></div>`;
+  d.querySelector('[data-x]').onclick=()=>d.remove();
+  d.querySelector('[data-ok]').onclick=()=>{ d.remove(); onOk(); };
+  document.body.appendChild(d);
+}
+function promptBox(title,ph,onOk){
+  const d=document.createElement('div'); d.className='modal';
+  d.innerHTML=`<div class="box"><div style="font-weight:700;margin-bottom:10px">${esc(title)}</div>
+    <input type="password" id="_pb" placeholder="${esc(ph)}">
+    <div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn ghost sm" data-x>취소</button><button class="btn sm" data-ok>확인</button></div></div>`;
+  d.querySelector('[data-x]').onclick=()=>d.remove();
+  d.querySelector('[data-ok]').onclick=()=>{ const val=d.querySelector('#_pb').value; d.remove(); onOk(val); };
+  document.body.appendChild(d); setTimeout(()=>d.querySelector('#_pb').focus(),30);
+}
+function pwChangeBox(m){
+  const d=document.createElement('div'); d.className='modal';
+  d.innerHTML=`<div class="box"><div style="font-weight:700;margin-bottom:10px">비밀번호 변경</div>
+    <label class="fl">현재 비밀번호</label><input type="password" id="_o">
+    <label class="fl" style="margin-top:8px">새 비밀번호</label><input type="password" id="_n">
+    <div class="err" id="_e"></div>
+    <div class="row" style="justify-content:flex-end"><button class="btn ghost sm" data-x>취소</button><button class="btn sm" data-ok>변경</button></div></div>`;
+  d.querySelector('[data-x]').onclick=()=>d.remove();
+  d.querySelector('[data-ok]').onclick=async()=>{
+    const o=d.querySelector('#_o').value, n=d.querySelector('#_n').value, e=d.querySelector('#_e');
+    if(await sha(o)!==m.pw){ e.textContent='현재 비밀번호가 맞지 않습니다'; return; }
+    if(!n||n.length<4){ e.textContent='새 비밀번호는 4자 이상'; return; }
+    if(n===ADMIN_PW){ e.textContent='사용할 수 없는 비밀번호입니다'; return; }
+    m.pw=await sha(n); await saveMember(m); d.remove(); toast('비밀번호를 변경했습니다');
+  };
+  document.body.appendChild(d);
+}
+
+/* ---------- GATE ---------- */
+let gateSel=null;
+function renderGate(){
+  document.getElementById('setup').classList.add('hide');
+  document.getElementById('app').classList.add('hide');
+  document.getElementById('gate').classList.remove('hide');
+  const list=document.getElementById('memList');
+  document.getElementById('noMem').classList.toggle('hide',MEM.length>0);
+  list.innerHTML=MEM.map(m=>`<button data-id="${m.id}" class="${gateSel===m.id?'on':''}">${esc(m.name)}${m.nickname?' · '+esc(m.nickname):''}</button>`).join('')||`<span class="muted small">—</span>`;
+  list.querySelectorAll('button').forEach(b=>b.onclick=()=>{ gateSel=b.dataset.id; renderGate(); document.getElementById('pwIn').focus(); });
+}
+function openDefaultTab(){
+  wkStart=inPeriod(todayKST())?mondayOf(todayKST()):null;
+  tab=inPeriod(todayKST())?todayKST():'board';
+}
+function initGate(){
+  const err=document.getElementById('loginErr');
+  document.getElementById('toReg').onclick=()=>{
+    document.getElementById('loginCard').classList.add('hide');
+    document.getElementById('regCard').classList.remove('hide');
+  };
+  document.getElementById('toLogin').onclick=()=>{
+    document.getElementById('regCard').classList.add('hide');
+    document.getElementById('loginCard').classList.remove('hide');
+  };
+  const doLogin=async()=>{
+    const v=document.getElementById('pwIn').value; err.textContent='';
+    if(!v){ err.textContent='비밀번호를 입력해 주세요'; return; }
+    if(v===ADMIN_PW){
+      isAdmin=true; me=gateSel||null;
+      try{ localStorage.setItem(LS,JSON.stringify({me,admin:true})); }catch(e){}
+      tab='board'; render(); toast('관리자 모드로 입장했습니다'); return;
+    }
+    if(!gateSel){ err.textContent='참가자를 선택해 주세요'; return; }
+    const m=memById(gateSel);
+    if(!m||await sha(v)!==m.pw){ err.textContent='비밀번호가 맞지 않습니다'; return; }
+    me=m.id; isAdmin=false;
+    try{ localStorage.setItem(LS,JSON.stringify({me,admin:false})); }catch(e){}
+    openDefaultTab(); render();
+  };
+  document.getElementById('loginBtn').onclick=doLogin;
+  document.getElementById('pwIn').onkeydown=e=>{ if(e.key==='Enter') doLogin(); };
+
+  document.getElementById('regBtn').onclick=async()=>{
+    const e2=document.getElementById('regErr'); e2.textContent='';
+    const name=document.getElementById('rName').value.trim();
+    const nick=document.getElementById('rNick').value.trim();
+    const p1=document.getElementById('rPw').value, p2=document.getElementById('rPw2').value;
+    if(!name){ e2.textContent='이름을 입력해 주세요'; return; }
+    if(MEM.some(m=>m.name===name&&m.nickname===nick)){ e2.textContent='같은 이름·별명이 이미 있습니다'; return; }
+    if(!p1||p1.length<4){ e2.textContent='비밀번호는 4자 이상'; return; }
+    if(p1!==p2){ e2.textContent='비밀번호가 일치하지 않습니다'; return; }
+    if(p1===ADMIN_PW){ e2.textContent='사용할 수 없는 비밀번호입니다'; return; }
+    const m={id:uid(),name,nickname:nick,pw:await sha(p1),subjects:{mon:[],tue:[],wed:[],thu:[],fri:[],sat:[]},createdAt:new Date().toISOString()};
+    if(!await saveMember(m)){ e2.textContent='등록에 실패했습니다 (Firestore 규칙을 확인해 주세요)'; return; }
+    if(!memById(m.id)) MEM.push(m);
+    me=m.id; isAdmin=false;
+    try{ localStorage.setItem(LS,JSON.stringify({me,admin:false})); }catch(e){}
+    tab='me'; render(); toast('등록되었습니다. 요일별 과목을 입력해 주세요');
+  };
+
+  document.getElementById('meBtn').onclick=()=>{ tab='me'; render(); };
+  document.getElementById('adminBtn').onclick=()=>{ tab='admin'; render(); };
+  document.getElementById('logoutBtn').onclick=()=>{
+    me=null; isAdmin=false; gateSel=null;
+    try{ localStorage.removeItem(LS); }catch(e){}
+    const p=document.getElementById('pwIn'); if(p) p.value='';
+    renderGate();
+  };
+}
+
+/* ---------- 세션 복구 ---------- */
+let restored=false;
+function restoreSession(){
+  if(restored) return;
+  let s=null; try{ s=JSON.parse(localStorage.getItem(LS)||'null'); }catch(e){}
+  if(!s){ restored=true; return; }
+  if(!MEM.length&&s.me) return;
+  restored=true;
+  if(s.admin){ isAdmin=true; me=(s.me&&memById(s.me))?s.me:null; }
+  else if(s.me&&memById(s.me)) me=s.me;
+  if(me||isAdmin) openDefaultTab();
+}
+
+/* ---------- 설정 화면 ---------- */
+function showSetup(){
+  document.getElementById('setup').classList.remove('hide');
+  document.getElementById('gate').classList.add('hide');
+  document.getElementById('app').classList.add('hide');
+  document.getElementById('cfgSave').onclick=()=>{
+    const raw=document.getElementById('cfgPaste').value.trim();
+    const e=document.getElementById('cfgErr'); e.textContent='';
+    let cfg=null;
+    try{
+      const body=raw.replace(/^[^{]*\{/,'{').replace(/\}[^}]*$/,'}');
+      cfg=(new Function('return ('+body+')'))();
+    }catch(err){ e.textContent='형식을 읽을 수 없습니다. 중괄호 { } 안의 내용을 그대로 붙여넣어 주세요'; return; }
+    if(!cfg||!cfg.apiKey||!cfg.projectId){ e.textContent='apiKey와 projectId가 보이지 않습니다'; return; }
+    try{ localStorage.setItem(LSC,JSON.stringify(cfg)); }catch(err){}
+    location.reload();
+  };
+}
+function loadConfig(){
+  if(FIREBASE_CONFIG&&FIREBASE_CONFIG.apiKey&&FIREBASE_CONFIG.projectId) return FIREBASE_CONFIG;
+  try{
+    const s=JSON.parse(localStorage.getItem(LSC)||'null');
+    if(s&&s.apiKey&&s.projectId) return s;
+  }catch(e){}
+  return null;
+}
+
+/* ---------- BOOT ---------- */
+(async function boot(){
+  initGate();
+  const cfg=loadConfig();
+  if(!cfg){ showSetup(); return; }
+  let app;
+  try{
+    app=initializeApp(cfg); fs=getFirestore(app);
+  }catch(e){
+    showSetup();
+    document.getElementById('cfgErr').textContent='Firebase 연결에 실패했습니다. 설정값을 다시 확인해 주세요.';
+    return;
+  }
+  if(location.protocol==='file:'){
+    banner('로컬 파일로 열면 로그인이 동작하지 않습니다',
+      'Firebase 인증은 <code>http://</code> 또는 <code>https://</code> 주소에서만 됩니다. 파일을 더블클릭해 여는 대신 Netlify·GitHub Pages 등에 올린 뒤 그 주소로 접속해 주세요.');
+  }else{
+    try{ await signInAnonymously(getAuth(app)); }
+    catch(e){
+      const c=(e&&e.code)||'', msg=(e&&e.message)||'';
+      if(c.indexOf('operation-not-allowed')>=0||c.indexOf('configuration-not-found')>=0){
+        banner('Firebase에서 "익명" 로그인이 꺼져 있습니다',
+          'Firebase 콘솔 → <b>빌드 → Authentication</b> → <b>시작하기</b> → <b>익명</b> → <b>사용 설정</b> 후 이 페이지를 새로고침해 주세요.');
+      }else if(c.indexOf('unauthorized-domain')>=0){
+        banner('이 주소가 Firebase에 등록되어 있지 않습니다',
+          `Firebase 콘솔 → <b>Authentication → Settings → 승인된 도메인</b>에서 <code>${esc(location.hostname)}</code> 을 추가하고 새로고침해 주세요.`);
+      }else if(c.indexOf('api-key-not-valid')>=0||c.indexOf('invalid-api-key')>=0){
+        banner('Firebase 설정값이 맞지 않습니다',
+          'index.html 맨 위의 FIREBASE_CONFIG 값을 콘솔의 값과 다시 맞춰 주세요.');
+      }else if(c.indexOf('network-request-failed')>=0){
+        banner('Firebase에 연결하지 못했습니다',
+          '인터넷 연결, 광고 차단 확장 기능, 회사·학교 네트워크 차단 여부를 확인하고 새로고침해 주세요.');
+      }else{
+        banner('인증 연결에 실패했습니다',
+          `아래 내용을 그대로 알려 주시면 원인을 찾을 수 있습니다.<br><code>${esc(c||'(코드 없음)')}</code><br><span class="small">${esc(msg)}</span>`);
+      }
+    }
+  }
+  renderGate();
+
+  onSnapshot(doc(fs,'config','settings'),s=>{
+    if(s.exists()){ const d=s.data(); CFG={title:d.title||'스터디 출결 체크',startDate:d.startDate||null,endDate:d.endDate||null}; }
+    restoreSession(); render();
+  },()=>{});
+
+  onSnapshot(collection(fs,'members'),snap=>{
+    MEM=snap.docs.map(d=>Object.assign({id:d.id},d.data()))
+                 .sort((a,b)=>String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
+    restoreSession();
+    if(me&&!memById(me)&&!isAdmin){ me=null; try{localStorage.removeItem(LS);}catch(e){} }
+    render();
+  },()=>{ toast('참가자 목록을 불러오지 못했습니다. Firestore 규칙을 확인해 주세요'); });
+
+  onSnapshot(collection(fs,'records'),snap=>{
+    const next={}; snap.forEach(d=>next[d.id]=d.data()); REC=next; render();
+  },()=>{});
+
+  setInterval(()=>{ if(me||isAdmin) render(); },60000);
+})();
+</script>
+</body>
+</html>
