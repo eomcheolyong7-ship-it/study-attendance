@@ -227,7 +227,7 @@ service cloud.firestore {
       <h3>새 참가자 등록</h3>
       <label class="fl">이름</label>
       <input type="text" id="rName" placeholder="홍길동" autocomplete="off">
-      <label class="fl" style="margin-top:10px">별명</label>
+      <label class="fl" style="margin-top:10px">별명 <span style="color:var(--dim)">(적으면 다른 사람에게는 별명만 보입니다)</span></label>
       <input type="text" id="rNick" placeholder="길동쌤" autocomplete="off">
       <label class="fl" style="margin-top:10px">개인 비밀번호</label>
       <input type="password" id="rPw" placeholder="4자 이상" autocomplete="new-password">
@@ -337,6 +337,10 @@ async function sha(s){
   return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
 }
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// 표시 이름: 별명이 있으면 별명만. 관리자에게는 실제 이름을 괄호로 함께 보여 줌
+const dispName=m=>(m&&(m.nickname||m.name))||'';
+const labelText=m=>(isAdmin&&m&&m.nickname&&m.nickname!==m.name)?`${m.nickname} (${m.name})`:dispName(m);
+const labelHtml=m=>(isAdmin&&m&&m.nickname&&m.nickname!==m.name)?`${esc(m.nickname)} <span class="mnick">(${esc(m.name)})</span>`:esc(dispName(m));
 const uid=()=>'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 function banner(title,html){
   const d=document.createElement('div');
@@ -404,7 +408,7 @@ async function deleteMember(m){
     for(const d of ps.docs) await deleteDoc(d.ref);
     await deleteDoc(doc(fs,'members',m.id));
     if(me===m.id){ me=null; try{localStorage.removeItem(LS);}catch(e){} }
-    toast(`${m.name} 계정과 출결 기록을 삭제했습니다`); return true;
+    toast(`${labelText(m)} 계정과 출결 기록을 삭제했습니다`); return true;
   }catch(e){ toast('삭제 실패'); return false; }
 }
 
@@ -504,7 +508,7 @@ function render(){
     (CFG.startDate&&CFG.endDate)?`기간 ${CFG.startDate} ~ ${CFG.endDate}`:'기간 미설정 (관리자 설정 필요)';
 
   const m=memById(me), chip=document.getElementById('meChip');
-  chip.textContent=isAdmin?(m?`관리자 · ${m.name}`:'관리자 모드'):`${m?m.name:''}${m&&m.nickname?' ('+m.nickname+')':''}`;
+  chip.textContent=isAdmin?(m?`관리자 · ${dispName(m)}`:'관리자 모드'):dispName(m);
   chip.className='chip'+(isAdmin?' admin':'');
   const meBtn=document.getElementById('meBtn');
   meBtn.classList.toggle('hide',!m); meBtn.classList.toggle('on',tab==='me');
@@ -570,7 +574,7 @@ function viewBoard(){
   let sum=`<div class="card"><h3>누적 집계 <span class="muted small" style="font-weight:400">· 참가자 ${MEM.length}명 · ${ws.length}주</span></h3>
     <div class="board"><table class="bd"><thead><tr><th class="nm">참가자</th><th>출석</th><th>결석</th><th>공강</th></tr></thead><tbody>`;
   MEM.forEach(m=>{
-    sum+=`<tr><td class="nm"><b>${esc(m.name)}</b>${m.nickname?` <span class="mnick">${esc(m.nickname)}</span>`:''}</td>
+    sum+=`<tr><td class="nm"><b>${labelHtml(m)}</b></td>
       <td><b style="color:var(--green)">${tot[m.id].present}</b></td>
       <td><b style="color:var(--red)">${tot[m.id].absent}</b></td>
       <td><b style="color:var(--blue)">${tot[m.id].free}</b></td></tr>`;
@@ -586,7 +590,7 @@ function viewBoard(){
     days.forEach(d=>head+=`<th${d===today?' style="color:var(--fg);font-weight:700"':''}>${DAY_KO[dowOf(d)]}<br><span style="font-size:10px;opacity:.7">${mmdd(d)}</span></th>`);
     let rows='';
     MEM.forEach(m=>{
-      let tds=`<td class="nm">${esc(m.name)}</td>`;
+      let tds=`<td class="nm">${labelHtml(m)}</td>`;
       days.forEach(d=>{
         const st=statusOf(m,d);
         const sym={present:'출',absent:'결',free:'공',wait:'·',none:''}[st.s]||'';
@@ -658,8 +662,7 @@ function viewDay(ds){
 
     html+=`<div class="mcard ${mine?'me':''}">
       <div class="mhead">
-        <span class="mname">${esc(m.name)}</span>
-        ${m.nickname?`<span class="mnick">${esc(m.nickname)}</span>`:''}
+        <span class="mname">${labelHtml(m)}</span>
         <span class="badge b-${st.s} ${st.ovr?'ovr':''}"><i></i>${st.label}</span>
         ${st.reason?`<span class="small muted">${st.reason}</span>`:''}
         ${mine?'<span class="small muted">· 나</span>':''}
@@ -711,7 +714,7 @@ function viewAdmin(){
   MEM.forEach(m=>{
     const n=Object.keys(REC).filter(k=>REC[k]&&REC[k].memberId===m.id).length;
     rows+=`<div class="srow" style="padding:9px 0;border-bottom:1px solid var(--line)">
-      <div style="flex:1;min-width:120px"><b>${esc(m.name)}</b> <span class="mnick">${esc(m.nickname||'')}</span>
+      <div style="flex:1;min-width:120px"><b>${esc(dispName(m))}</b> <span class="mnick">${m.nickname&&m.nickname!==m.name?'실명 '+esc(m.name):'별명 없음'}</span>
         <div class="muted small">기록 ${n}일</div></div>
       <button class="btn sm ghost" data-act="aresetpw" data-m="${m.id}">비밀번호 초기화</button>
       <button class="btn sm red" data-act="adel" data-m="${m.id}">계정 삭제</button></div>`;
@@ -765,7 +768,9 @@ function bindView(){
   if(sv&&m) sv.onclick=async()=>{
     const n=document.getElementById('meName').value.trim();
     if(!n) return toast('이름을 입력해 주세요');
-    m.name=n; m.nickname=document.getElementById('meNick').value.trim();
+    const nk=document.getElementById('meNick').value.trim();
+    if(MEM.some(o=>o.id!==m.id&&dispName(o)===(nk||n))) return toast('같은 별명(이름)이 이미 있습니다');
+    m.name=n; m.nickname=nk;
     if(await saveMember(m)){ toast('저장했습니다'); render(); }
   };
   const pw=document.getElementById('mePw');
@@ -801,13 +806,13 @@ function bindView(){
   };
   v.querySelectorAll('[data-act="adel"]').forEach(b=>b.onclick=()=>{
     const t=memById(b.dataset.m); if(!t) return;
-    confirmBox(`${t.name} 계정을 삭제합니다. 출결 기록과 사진도 함께 지워지고 되돌릴 수 없습니다.`,async()=>{
+    confirmBox(`${labelText(t)} 계정을 삭제합니다. 출결 기록과 사진도 함께 지워지고 되돌릴 수 없습니다.`,async()=>{
       await deleteMember(t); render();
     });
   });
   v.querySelectorAll('[data-act="aresetpw"]').forEach(b=>b.onclick=()=>{
     const t=memById(b.dataset.m); if(!t) return;
-    promptBox(`${t.name}의 새 비밀번호`,'4자 이상',async val=>{
+    promptBox(`${labelText(t)}의 새 비밀번호`,'4자 이상',async val=>{
       if(!val||val.length<4) return toast('4자 이상 입력해 주세요');
       t.pw=await sha(val); if(await saveMember(t)) toast('비밀번호를 변경했습니다');
     });
@@ -857,7 +862,7 @@ function renderGate(){
   document.getElementById('gate').classList.remove('hide');
   const list=document.getElementById('memList');
   document.getElementById('noMem').classList.toggle('hide',MEM.length>0);
-  list.innerHTML=MEM.map(m=>`<button data-id="${m.id}" class="${gateSel===m.id?'on':''}">${esc(m.name)}${m.nickname?' · '+esc(m.nickname):''}</button>`).join('')||`<span class="muted small">—</span>`;
+  list.innerHTML=MEM.map(m=>`<button data-id="${m.id}" class="${gateSel===m.id?'on':''}">${esc(dispName(m))}</button>`).join('')||`<span class="muted small">—</span>`;
   list.querySelectorAll('button').forEach(b=>b.onclick=()=>{ gateSel=b.dataset.id; renderGate(); document.getElementById('pwIn').focus(); });
 }
 function openDefaultTab(){
@@ -898,7 +903,7 @@ function initGate(){
     const nick=document.getElementById('rNick').value.trim();
     const p1=document.getElementById('rPw').value, p2=document.getElementById('rPw2').value;
     if(!name){ e2.textContent='이름을 입력해 주세요'; return; }
-    if(MEM.some(m=>m.name===name&&m.nickname===nick)){ e2.textContent='같은 이름·별명이 이미 있습니다'; return; }
+    if(MEM.some(m=>dispName(m)===(nick||name))){ e2.textContent='같은 별명(이름)이 이미 있습니다. 다른 별명을 써 주세요'; return; }
     if(!p1||p1.length<4){ e2.textContent='비밀번호는 4자 이상'; return; }
     if(p1!==p2){ e2.textContent='비밀번호가 일치하지 않습니다'; return; }
     if(p1===ADMIN_PW){ e2.textContent='사용할 수 없는 비밀번호입니다'; return; }
