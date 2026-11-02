@@ -212,12 +212,13 @@ service cloud.firestore {
     <div class="sub" id="gateSub">개인 비밀번호로 입장합니다</div>
     <div class="card" id="loginCard">
       <h3>입장하기</h3>
-      <div id="noMem" class="muted small hide" style="margin-bottom:10px">아직 등록된 참가자가 없습니다. 아래에서 먼저 등록해 주세요.</div>
+      <div id="noMem" class="muted small hide" style="margin-bottom:10px">승인된 참가자가 아직 없습니다. 아래에서 가입을 신청해 주세요.</div>
       <label class="fl">참가자 선택</label>
       <div class="memlist" id="memList"></div>
       <label class="fl">개인 비밀번호</label>
       <input type="password" id="pwIn" placeholder="비밀번호 입력" autocomplete="off">
       <div class="err" id="loginErr"></div>
+      <div class="small" id="gateNote" style="color:var(--green);margin-top:8px"></div>
       <div class="row" style="margin-top:4px">
         <button class="btn" id="loginBtn">입장</button>
         <button class="btn ghost" id="toReg">새 참가자 등록</button>
@@ -235,10 +236,10 @@ service cloud.firestore {
       <input type="password" id="rPw2" placeholder="다시 입력" autocomplete="new-password">
       <div class="err" id="regErr"></div>
       <div class="row" style="margin-top:4px">
-        <button class="btn" id="regBtn">등록하고 입장</button>
+        <button class="btn" id="regBtn">가입 신청</button>
         <button class="btn ghost" id="toLogin">돌아가기</button>
       </div>
-      <div class="small muted" style="margin-top:10px">등록 후 상단 <b>내 정보</b>에서 요일별 과목을 입력하세요. 이름·별명·시간표는 언제든 수정할 수 있습니다.</div>
+      <div class="small muted" style="margin-top:10px">신청하면 관리자가 승인한 뒤에 입장할 수 있습니다. 입장한 뒤 상단 <b>내 정보</b>에서 요일별 과목을 입력하세요.</div>
     </div>
     <div class="small" style="text-align:center;color:var(--dim);margin-top:14px">
       비밀번호는 출결 확인용 간단한 구분 장치입니다. 다른 곳에서 쓰는 비밀번호는 사용하지 마세요.
@@ -292,7 +293,20 @@ import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/1
 
 const DAY_KO  = ['일','월','화','수','목','금','토'];
 const DAY_KEY = ['sun','mon','tue','wed','thu','fri','sat'];
-const ADMIN_PW = '9684';
+// 관리자 비밀번호는 코드에 그대로 적지 않고 PBKDF2 해시로만 둡니다.
+// 바꾸려면 관리자 화면의 "관리자 비밀번호 바꾸기"에서 새 값을 만들어 이 블록을 통째로 교체하세요.
+const ADMIN_AUTH = {
+  salt: "43dbda6ae46db969ced79c35ff640e3b",
+  iter: 200000,
+  hash: "4409248d5ed22813fc1448643835510a30933e6ac09b72f84e3f22b196872894"
+};
+const hex=b=>[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');
+const unhex=t=>new Uint8Array(t.match(/../g).map(x=>parseInt(x,16)));
+async function pbkdf2(pw,saltHex,iter){
+  const key=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveBits']);
+  return hex(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:unhex(saltHex),iterations:iter},key,256));
+}
+const verifyAdmin=async pw=>!!pw&&(await pbkdf2(pw,ADMIN_AUTH.salt,ADMIN_AUTH.iter))===ADMIN_AUTH.hash;
 const LS  = 'studyatt.me.v1';
 const LSC = 'studyatt.fbcfg.v1';
 
@@ -341,6 +355,11 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 const dispName=m=>(m&&(m.nickname||m.name))||'';
 const labelText=m=>(isAdmin&&m&&m.nickname&&m.nickname!==m.name)?`${m.nickname} (${m.name})`:dispName(m);
 const labelHtml=m=>(isAdmin&&m&&m.nickname&&m.nickname!==m.name)?`${esc(m.nickname)} <span class="mnick">(${esc(m.name)})</span>`:esc(dispName(m));
+// 승인 여부: approved 필드가 없는 기존 가입자는 승인된 것으로 취급
+const isApproved=m=>!!m&&m.approved!==false;
+const ACT=()=>MEM.filter(isApproved);
+const pendingList=()=>MEM.filter(m=>!isApproved(m));
+let deferredRender=false;
 const uid=()=>'m'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 function banner(title,html){
   const d=document.createElement('div');
@@ -497,6 +516,15 @@ function paintPhotos(){
 /* ============================================================
    RENDER
    ============================================================ */
+// 다른 사람의 변경·타이머처럼 '배경에서 오는' 갱신용. 글자를 입력 중이거나 관리자 비밀번호 코드를 만드는 중이면 미뤄 둠
+function softRender(){
+  const vw=document.getElementById('view'), ae=document.activeElement;
+  const typing=!!(ae&&vw&&vw.contains(ae)&&((ae.tagName==='INPUT'&&/^(text|password|date|search|number)$/.test(ae.type))||(ae.tagName==='TEXTAREA'&&!ae.readOnly)));
+  const a1=document.getElementById('apw1'), a2=document.getElementById('apw2'), ao=document.getElementById('apwOut');
+  const busy=!!(a1&&(a1.value||(a2&&a2.value)||(ao&&!ao.classList.contains('hide'))));
+  if(typing||busy){ deferredRender=true; return; }
+  render();
+}
 function render(){
   if(!fs){ return; }
   if(!me&&!isAdmin){ renderGate(); return; }
@@ -514,6 +542,7 @@ function render(){
   meBtn.classList.toggle('hide',!m); meBtn.classList.toggle('on',tab==='me');
   const adBtn=document.getElementById('adminBtn');
   adBtn.classList.toggle('hide',!isAdmin); adBtn.classList.toggle('on',tab==='admin');
+  adBtn.textContent='관리자'+(pendingList().length?` · 승인 대기 ${pendingList().length}`:'');
 
   renderWeekNav(); renderTabs();
   const v=document.getElementById('view');
@@ -564,16 +593,16 @@ function renderTabs(){
 
 function viewBoard(){
   const ws=weeks();
-  if(!MEM.length) return `<div class="card"><h3>전체 현황</h3><div class="muted small">참가자가 없습니다.</div></div>`;
+  if(!ACT().length) return `<div class="card"><h3>전체 현황</h3><div class="muted small">참가자가 없습니다.</div></div>`;
   if(!ws.length) return `<div class="card"><h3>전체 현황</h3><div class="muted small">관리자가 스터디 기간을 설정하면 현황표가 표시됩니다.</div></div>`;
   const today=todayKST(), tot={};
-  MEM.forEach(m=>tot[m.id]={present:0,absent:0,free:0});
-  dateRange().filter(d=>dowOf(d)!==0).forEach(d=>MEM.forEach(m=>{
+  ACT().forEach(m=>tot[m.id]={present:0,absent:0,free:0});
+  dateRange().filter(d=>dowOf(d)!==0).forEach(d=>ACT().forEach(m=>{
     const s=statusOf(m,d).s; if(tot[m.id][s]!==undefined) tot[m.id][s]++;
   }));
-  let sum=`<div class="card"><h3>누적 집계 <span class="muted small" style="font-weight:400">· 참가자 ${MEM.length}명 · ${ws.length}주</span></h3>
+  let sum=`<div class="card"><h3>누적 집계 <span class="muted small" style="font-weight:400">· 참가자 ${ACT().length}명 · ${ws.length}주</span></h3>
     <div class="board"><table class="bd"><thead><tr><th class="nm">참가자</th><th>출석</th><th>결석</th><th>공강</th></tr></thead><tbody>`;
-  MEM.forEach(m=>{
+  ACT().forEach(m=>{
     sum+=`<tr><td class="nm"><b>${labelHtml(m)}</b></td>
       <td><b style="color:var(--green)">${tot[m.id].present}</b></td>
       <td><b style="color:var(--red)">${tot[m.id].absent}</b></td>
@@ -589,7 +618,7 @@ function viewBoard(){
     let head=`<th class="nm">참가자</th>`;
     days.forEach(d=>head+=`<th${d===today?' style="color:var(--fg);font-weight:700"':''}>${DAY_KO[dowOf(d)]}<br><span style="font-size:10px;opacity:.7">${mmdd(d)}</span></th>`);
     let rows='';
-    MEM.forEach(m=>{
+    ACT().forEach(m=>{
       let tds=`<td class="nm">${labelHtml(m)}</td>`;
       days.forEach(d=>{
         const st=statusOf(m,d);
@@ -625,9 +654,9 @@ function viewDay(ds){
   }else{
     html+=`<div class="card"><h3>${mmdd(ds)} (일)</h3><div class="muted small">일요일은 출결·공강을 집계하지 않습니다. 사진은 자유롭게 올릴 수 있습니다.</div></div>`;
   }
-  if(!MEM.length) return html+`<div class="card muted small">참가자가 없습니다.</div>`;
+  if(!ACT().length) return html+`<div class="card muted small">참가자가 없습니다.</div>`;
 
-  [...MEM].sort((a,b)=>(a.id===me?-1:b.id===me?1:0)).forEach(m=>{
+  [...ACT()].sort((a,b)=>(a.id===me?-1:b.id===me?1:0)).forEach(m=>{
     const st=statusOf(m,ds), r=recOf(m.id,ds), subs=subjectsOf(m,ds);
     const cancelled=(r&&r.cancelled)||{}, mine=m.id===me, canEdit=(mine&&!locked)||isAdmin;
     const k=rkey(m.id,ds), hasPhoto=!!(r&&r.hasPhoto);
@@ -702,7 +731,7 @@ function viewMe(){
       <button class="btn sm" id="meSave">이름·별명 저장</button>
       <button class="btn sm ghost" id="mePw">비밀번호 변경</button>
     </div>
-    <div class="muted small" style="margin-top:10px">언제든 다시 들어와 수정할 수 있습니다.</div></div>
+    <div class="muted small" style="margin-top:10px">언제든 다시 들어와 수정할 수 있습니다. 다른 참가자에게는 별명이 있으면 별명만 보이고, 관리자에게는 실제 이름도 함께 보입니다.</div></div>
   <div class="card"><h3>수강 과목 (월~토)</h3>
     <div class="muted small" style="margin-bottom:12px"><b>제외</b>를 누르면 적어 둔 채로 출결 판정에서 무시됩니다.
       집계 과목이 하나도 없는 요일은 자동 공강이 됩니다. 과목명은 입력하는 즉시 저장됩니다.</div>
@@ -710,8 +739,28 @@ function viewMe(){
 }
 
 function viewAdmin(){
+  const pend=pendingList();
+  const when=t=>{ try{ return new Date(t).toLocaleString('ko-KR',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } };
+  const pendHtml=`<div class="card" ${pend.length?'style="border-color:#6a5420"':''}><h3>가입 승인 대기 <span class="muted small" style="font-weight:400">· ${pend.length}명</span></h3>${
+    pend.length?pend.map(m=>`<div class="srow" style="padding:9px 0;border-bottom:1px solid var(--line)">
+      <div style="flex:1;min-width:120px"><b>${esc(dispName(m))}</b> <span class="mnick">${m.nickname&&m.nickname!==m.name?'실명 '+esc(m.name):'별명 없음'}</span>
+        <div class="muted small">${esc(when(m.createdAt))} 신청</div></div>
+      <button class="btn sm" data-act="aok" data-m="${m.id}">승인</button>
+      <button class="btn sm ghost" data-act="ano" data-m="${m.id}" style="color:var(--red)">거절</button></div>`).join(''):'<div class="muted small">대기 중인 신청이 없습니다.</div>'
+  }</div>`;
+  const apwCard=`<div class="card"><h3>관리자 비밀번호 바꾸기</h3>
+    <div class="muted small" style="margin-bottom:10px">코드를 열어 봐도 비밀번호를 알 수 없도록, 비밀번호 자체가 아니라 암호화된 값만 파일에 넣습니다. 입력한 비밀번호는 이 화면 안에서만 계산되고 어디로도 전송되지 않습니다. 길수록 안전합니다 (12자 이상 권장, 숫자 4자리는 금방 뚫립니다).</div>
+    <label class="fl">새 비밀번호</label><input type="password" id="apw1" autocomplete="new-password">
+    <label class="fl" style="margin-top:8px">새 비밀번호 확인</label><input type="password" id="apw2" autocomplete="new-password">
+    <div class="err" id="apwErr"></div>
+    <div class="row"><button class="btn sm" id="apwMake">코드 만들기</button></div>
+    <div id="apwOut" class="hide" style="margin-top:12px">
+      <div class="small" style="margin-bottom:6px">아래 내용을 복사해 GitHub의 <code>index.html</code>을 열고 <code>const ADMIN_AUTH = {</code> 블록 전체를 이 내용으로 바꾼 뒤 Commit 하세요. 반영되기 전까지는 지금 비밀번호가 계속 쓰이고, 반영 후에는 이전 비밀번호가 막힙니다.</div>
+      <textarea id="apwCode" readonly style="min-height:110px"></textarea>
+      <div class="row" style="margin-top:8px"><button class="btn sm ghost" id="apwCopy">복사</button></div>
+    </div></div>`;
   let rows='';
-  MEM.forEach(m=>{
+  ACT().forEach(m=>{
     const n=Object.keys(REC).filter(k=>REC[k]&&REC[k].memberId===m.id).length;
     rows+=`<div class="srow" style="padding:9px 0;border-bottom:1px solid var(--line)">
       <div style="flex:1;min-width:120px"><b>${esc(dispName(m))}</b> <span class="mnick">${m.nickname&&m.nickname!==m.name?'실명 '+esc(m.name):'별명 없음'}</span>
@@ -719,7 +768,7 @@ function viewAdmin(){
       <button class="btn sm ghost" data-act="aresetpw" data-m="${m.id}">비밀번호 초기화</button>
       <button class="btn sm red" data-act="adel" data-m="${m.id}">계정 삭제</button></div>`;
   });
-  return `<div class="card"><h3>스터디 기간 설정</h3>
+  return pendHtml+`<div class="card"><h3>스터디 기간 설정</h3>
     <div class="row">
       <div style="flex:1;min-width:150px"><label class="fl">시작일</label><input type="date" id="cStart" value="${CFG.startDate||''}"></div>
       <div style="flex:1;min-width:150px"><label class="fl">종료일</label><input type="date" id="cEnd" value="${CFG.endDate||''}"></div>
@@ -731,7 +780,7 @@ function viewAdmin(){
   <div class="card"><h3>출결 변경 권한</h3>
     <div class="muted small">요일 탭의 각 참가자 카드에서 <b>자동 판정 / 출석 / 결석 / 공강</b>을 직접 지정할 수 있습니다.
     마감이 지난 날짜의 사진도 관리자 모드에서는 올리고 뺄 수 있습니다.</div></div>
-  <div class="card"><h3>계정 관리 <span class="muted small" style="font-weight:400">· ${MEM.length}명</span></h3>
+  ${apwCard}<div class="card"><h3>계정 관리 <span class="muted small" style="font-weight:400">· ${ACT().length}명</span></h3>
     ${rows||'<div class="muted small">참가자가 없습니다.</div>'}
     <div class="muted small" style="margin-top:12px">계정을 삭제하면 그 사람의 출결 기록과 사진도 함께 지워집니다. 되돌릴 수 없습니다.</div></div>`;
 }
@@ -795,6 +844,35 @@ function bindView(){
     });
   }
 
+  v.querySelectorAll('[data-act="aok"]').forEach(b=>b.onclick=async()=>{
+    const t=memById(b.dataset.m); if(!t) return;
+    t.approved=true; if(await saveMember(t)) toast(`${dispName(t)} 가입을 승인했습니다`);
+  });
+  v.querySelectorAll('[data-act="ano"]').forEach(b=>b.onclick=()=>{
+    const t=memById(b.dataset.m); if(!t) return;
+    confirmBox(`${labelText(t)} 가입 신청을 거절합니다. 신청 정보가 삭제됩니다.`,async()=>{
+      try{ await deleteDoc(doc(fs,'members',t.id)); toast('가입 신청을 거절했습니다'); }catch(e){ toast('삭제 실패'); }
+    });
+  });
+  const am=document.getElementById('apwMake');
+  if(am) am.onclick=async()=>{
+    const a1=document.getElementById('apw1').value, a2=document.getElementById('apw2').value, e=document.getElementById('apwErr');
+    e.textContent='';
+    if(a1.length<8){ e.textContent='8자 이상으로 정해 주세요 (12자 이상 권장)'; return; }
+    if(a1!==a2){ e.textContent='두 칸이 일치하지 않습니다'; return; }
+    am.disabled=true; am.textContent='계산 중…';
+    const salt=hex(crypto.getRandomValues(new Uint8Array(16))), iter=ADMIN_AUTH.iter;
+    const hh=await pbkdf2(a1,salt,iter);
+    document.getElementById('apwCode').value='const ADMIN_AUTH = {\n  salt: "'+salt+'",\n  iter: '+iter+',\n  hash: "'+hh+'"\n};';
+    document.getElementById('apwOut').classList.remove('hide');
+    am.disabled=false; am.textContent='코드 다시 만들기';
+  };
+  const ac=document.getElementById('apwCopy');
+  if(ac) ac.onclick=async()=>{
+    const t=document.getElementById('apwCode'); t.select();
+    try{ await navigator.clipboard.writeText(t.value); toast('복사했습니다'); }
+    catch(err){ try{ document.execCommand('copy'); }catch(e2){} toast('복사가 안 되면 직접 선택해 복사해 주세요'); }
+  };
   const cs=document.getElementById('cSave');
   if(cs) cs.onclick=async()=>{
     const s=document.getElementById('cStart').value, e=document.getElementById('cEnd').value;
@@ -848,7 +926,7 @@ function pwChangeBox(m){
     const o=d.querySelector('#_o').value, n=d.querySelector('#_n').value, e=d.querySelector('#_e');
     if(await sha(o)!==m.pw){ e.textContent='현재 비밀번호가 맞지 않습니다'; return; }
     if(!n||n.length<4){ e.textContent='새 비밀번호는 4자 이상'; return; }
-    if(n===ADMIN_PW){ e.textContent='사용할 수 없는 비밀번호입니다'; return; }
+    if(await verifyAdmin(n)){ e.textContent='사용할 수 없는 비밀번호입니다'; return; }
     m.pw=await sha(n); await saveMember(m); d.remove(); toast('비밀번호를 변경했습니다');
   };
   document.body.appendChild(d);
@@ -861,8 +939,8 @@ function renderGate(){
   document.getElementById('app').classList.add('hide');
   document.getElementById('gate').classList.remove('hide');
   const list=document.getElementById('memList');
-  document.getElementById('noMem').classList.toggle('hide',MEM.length>0);
-  list.innerHTML=MEM.map(m=>`<button data-id="${m.id}" class="${gateSel===m.id?'on':''}">${esc(dispName(m))}</button>`).join('')||`<span class="muted small">—</span>`;
+  document.getElementById('noMem').classList.toggle('hide',ACT().length>0);
+  list.innerHTML=ACT().map(m=>`<button data-id="${m.id}" class="${gateSel===m.id?'on':''}">${esc(dispName(m))}</button>`).join('')||`<span class="muted small">—</span>`;
   list.querySelectorAll('button').forEach(b=>b.onclick=()=>{ gateSel=b.dataset.id; renderGate(); document.getElementById('pwIn').focus(); });
 }
 function openDefaultTab(){
@@ -881,18 +959,21 @@ function initGate(){
   };
   const doLogin=async()=>{
     const v=document.getElementById('pwIn').value; err.textContent='';
+    document.getElementById('gateNote').textContent='';
     if(!v){ err.textContent='비밀번호를 입력해 주세요'; return; }
-    if(v===ADMIN_PW){
-      isAdmin=true; me=gateSel||null;
-      try{ localStorage.setItem(LS,JSON.stringify({me,admin:true})); }catch(e){}
+    const m=gateSel?memById(gateSel):null;
+    if(m&&isApproved(m)&&await sha(v)===m.pw){
+      me=m.id; isAdmin=false;
+      try{ localStorage.setItem(LS,JSON.stringify({me})); }catch(e){}
+      openDefaultTab(); render(); return;
+    }
+    if(await verifyAdmin(v)){
+      isAdmin=true; me=(m&&isApproved(m))?m.id:null;
+      // 관리자 상태는 브라우저에 저장하지 않습니다 (저장값은 누구나 고칠 수 있어서). 새로고침하면 다시 입력해야 합니다.
+      try{ if(me) localStorage.setItem(LS,JSON.stringify({me})); else localStorage.removeItem(LS); }catch(e){}
       tab='board'; render(); toast('관리자 모드로 입장했습니다'); return;
     }
-    if(!gateSel){ err.textContent='참가자를 선택해 주세요'; return; }
-    const m=memById(gateSel);
-    if(!m||await sha(v)!==m.pw){ err.textContent='비밀번호가 맞지 않습니다'; return; }
-    me=m.id; isAdmin=false;
-    try{ localStorage.setItem(LS,JSON.stringify({me,admin:false})); }catch(e){}
-    openDefaultTab(); render();
+    err.textContent=gateSel?'비밀번호가 맞지 않습니다':'참가자를 선택해 주세요';
   };
   document.getElementById('loginBtn').onclick=doLogin;
   document.getElementById('pwIn').onkeydown=e=>{ if(e.key==='Enter') doLogin(); };
@@ -906,13 +987,14 @@ function initGate(){
     if(MEM.some(m=>dispName(m)===(nick||name))){ e2.textContent='같은 별명(이름)이 이미 있습니다. 다른 별명을 써 주세요'; return; }
     if(!p1||p1.length<4){ e2.textContent='비밀번호는 4자 이상'; return; }
     if(p1!==p2){ e2.textContent='비밀번호가 일치하지 않습니다'; return; }
-    if(p1===ADMIN_PW){ e2.textContent='사용할 수 없는 비밀번호입니다'; return; }
-    const m={id:uid(),name,nickname:nick,pw:await sha(p1),subjects:{mon:[],tue:[],wed:[],thu:[],fri:[],sat:[]},createdAt:new Date().toISOString()};
-    if(!await saveMember(m)){ e2.textContent='등록에 실패했습니다 (Firestore 규칙을 확인해 주세요)'; return; }
-    if(!memById(m.id)) MEM.push(m);
-    me=m.id; isAdmin=false;
-    try{ localStorage.setItem(LS,JSON.stringify({me,admin:false})); }catch(e){}
-    tab='me'; render(); toast('등록되었습니다. 요일별 과목을 입력해 주세요');
+    if(await verifyAdmin(p1)){ e2.textContent='사용할 수 없는 비밀번호입니다'; return; }
+    const m={id:uid(),name,nickname:nick,pw:await sha(p1),subjects:{mon:[],tue:[],wed:[],thu:[],fri:[],sat:[]},approved:false,createdAt:new Date().toISOString()};
+    if(!await saveMember(m)){ e2.textContent='신청에 실패했습니다 (Firestore 규칙을 확인해 주세요)'; return; }
+    ['rName','rNick','rPw','rPw2'].forEach(id=>{ document.getElementById(id).value=''; });
+    document.getElementById('regCard').classList.add('hide');
+    document.getElementById('loginCard').classList.remove('hide');
+    document.getElementById('gateNote').textContent='가입 신청이 접수되었습니다. 관리자가 승인하면 목록에 이름이 나타나고 입장할 수 있습니다.';
+    toast('가입 신청이 접수되었습니다');
   };
 
   document.getElementById('meBtn').onclick=()=>{ tab='me'; render(); };
@@ -925,6 +1007,8 @@ function initGate(){
   };
 }
 
+document.addEventListener('focusout',()=>{ if(deferredRender){ deferredRender=false; setTimeout(softRender,60); } });
+
 /* ---------- 세션 복구 ---------- */
 let restored=false;
 function restoreSession(){
@@ -933,9 +1017,9 @@ function restoreSession(){
   if(!s){ restored=true; return; }
   if(!MEM.length&&s.me) return;
   restored=true;
-  if(s.admin){ isAdmin=true; me=(s.me&&memById(s.me))?s.me:null; }
-  else if(s.me&&memById(s.me)) me=s.me;
-  if(me||isAdmin) openDefaultTab();
+  // 관리자 상태는 복구하지 않습니다 (예전에 저장된 admin 표시는 무시)
+  if(s.me&&isApproved(memById(s.me))) me=s.me;
+  if(me) openDefaultTab();
 }
 
 /* ---------- 설정 화면 ---------- */
@@ -1007,7 +1091,7 @@ function loadConfig(){
 
   onSnapshot(doc(fs,'config','settings'),s=>{
     if(s.exists()){ const d=s.data(); CFG={title:d.title||'스터디 출결 체크',startDate:d.startDate||null,endDate:d.endDate||null}; }
-    restoreSession(); render();
+    restoreSession(); softRender();
   },()=>{});
 
   onSnapshot(collection(fs,'members'),snap=>{
@@ -1015,14 +1099,14 @@ function loadConfig(){
                  .sort((a,b)=>String(a.createdAt||'').localeCompare(String(b.createdAt||'')));
     restoreSession();
     if(me&&!memById(me)&&!isAdmin){ me=null; try{localStorage.removeItem(LS);}catch(e){} }
-    render();
+    softRender();
   },()=>{ toast('참가자 목록을 불러오지 못했습니다. Firestore 규칙을 확인해 주세요'); });
 
   onSnapshot(collection(fs,'records'),snap=>{
-    const next={}; snap.forEach(d=>next[d.id]=d.data()); REC=next; render();
+    const next={}; snap.forEach(d=>next[d.id]=d.data()); REC=next; softRender();
   },()=>{});
 
-  setInterval(()=>{ if(me||isAdmin) render(); },60000);
+  setInterval(()=>{ if(me||isAdmin) softRender(); },60000);
 })();
 </script>
 </body>
