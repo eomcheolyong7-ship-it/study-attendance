@@ -105,6 +105,10 @@ ol.steps li{margin-bottom:10px}
 .photorow{display:flex;gap:12px;align-items:center;margin-top:12px;flex-wrap:wrap}
 .thumb{width:84px;height:84px;border-radius:10px;object-fit:cover;border:1px solid var(--line);background:var(--panel2);cursor:zoom-in}
 .ph-empty{width:84px;height:84px;border-radius:10px;border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:11.5px;text-align:center}
+.phgrid{display:flex;gap:10px;flex-wrap:wrap}
+.phitem{position:relative}
+.phx{position:absolute;top:-7px;right:-7px;width:24px;height:24px;border-radius:50%;background:var(--red);color:#fff;font-size:11px;line-height:20px;text-align:center;border:2px solid var(--panel);padding:0}
+.mcard.me .phx{border-color:#161b26}
 .lock{font-size:11.5px;color:var(--dim)}
 
 .board{overflow-x:auto}
@@ -296,7 +300,8 @@ let fs=null;
 let MEM=[], REC={}, PHOTO={};
 let CFG={title:'스터디 출결 체크',startDate:null,endDate:null};
 let me=null, isAdmin=false, tab='board', wkStart=null;
-let cdTimer=null, photoUnsub=null, photoDate=null;
+let cdTimer=null, photoUnsub=null, photoDate=null, photoReady=false;
+const MAX_PHOTOS=10;
 
 /* ---------- KST ---------- */
 const fmtDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul',year:'numeric',month:'2-digit',day:'2-digit'});
@@ -368,7 +373,7 @@ function statusOf(m,ds){
   if(Date.now()<deadlineOf(ds)) return {s:'wait',label:'미인증'};
   return {s:'absent',label:'결석'};
 }
-const isLocked=ds=>Date.now()>=deadlineOf(ds)&&!isAdmin;
+const isLocked=ds=>dowOf(ds)!==0&&Date.now()>=deadlineOf(ds)&&!isAdmin;
 
 /* ---------- 저장 ---------- */
 async function saveRec(mid,ds,patch){
@@ -415,37 +420,68 @@ async function shrink(file){
   while(url.length*0.75>160000&&q>0.3){ q-=0.1; url=c.toDataURL('image/jpeg',q); }
   return url;
 }
-async function uploadPhoto(mid,ds,file){
-  if(!file) return;
-  if(!/^image\//.test(file.type)) return toast('이미지 파일만 올릴 수 있습니다');
-  toast('사진 처리 중…');
-  let src;
-  try{ src=await shrink(file); }catch(e){ return toast('사진을 읽을 수 없습니다'); }
-  const k=rkey(mid,ds);
-  try{ await setDoc(doc(fs,'photos',k),{memberId:mid,date:ds,src,at:new Date().toISOString()}); }
-  catch(e){ return toast('사진 업로드 실패 — 용량을 줄여 다시 시도해 주세요'); }
-  PHOTO[k]={src};
-  if(await saveRec(mid,ds,{hasPhoto:true})) toast(dowOf(ds)===0?'사진이 등록되었습니다':'출석 인증 완료');
+function photosOf(mid){
+  return Object.entries(PHOTO).filter(([id,p])=>p&&p.memberId===mid)
+    .map(([id,p])=>Object.assign({id},p))
+    .sort((x,y)=>String(x.at||'').localeCompare(String(y.at||'')));
 }
-async function removePhoto(mid,ds){
-  const k=rkey(mid,ds);
-  try{ await deleteDoc(doc(fs,'photos',k)); }catch(e){}
-  delete PHOTO[k];
-  if(await saveRec(mid,ds,{hasPhoto:false})) toast('사진을 삭제했습니다');
+// 삭제 가능 여부: 관리자는 항상, 본인은 마감 전/일요일 자유, 마감 후에는 마지막 1장만 남겨 둠
+function canDeletePhoto(mid,ds,count){
+  if(isAdmin) return true;
+  if(mid!==me) return false;
+  if(dowOf(ds)===0) return true;
+  if(Date.now()<deadlineOf(ds)) return true;
+  return count>1;
+}
+async function uploadPhotos(mid,ds,files){
+  const images=(files||[]).filter(f=>f&&/^image\//.test(f.type));
+  if(!images.length) return toast('이미지 파일만 올릴 수 있습니다');
+  const have=photosOf(mid).length, room=MAX_PHOTOS-have;
+  if(room<=0) return toast(`하루에 ${MAX_PHOTOS}장까지 올릴 수 있습니다`);
+  const batch=images.slice(0,room);
+  toast(images.length>room?`${MAX_PHOTOS}장까지만 가능해 ${batch.length}장만 올립니다`:(batch.length>1?`사진 ${batch.length}장 처리 중…`:'사진 처리 중…'));
+  let ok=0;
+  for(let i=0;i<batch.length;i++){
+    let src; try{ src=await shrink(batch[i]); }catch(e){ continue; }
+    const id=rkey(mid,ds)+'__'+Date.now().toString(36)+i, at=new Date().toISOString();
+    try{ await setDoc(doc(fs,'photos',id),{memberId:mid,date:ds,src,at}); PHOTO[id]={memberId:mid,date:ds,src,at}; ok++; }
+    catch(e){ toast('사진 업로드 실패 — 용량을 줄여 다시 시도해 주세요'); }
+  }
+  if(!ok) return;
+  paintPhotos();
+  if(await saveRec(mid,ds,{hasPhoto:true,photoCount:have+ok})) toast(dowOf(ds)===0?`사진 ${ok}장이 등록되었습니다`:'출석 인증 완료');
+}
+async function removePhoto(id,mid,ds){
+  const list=photosOf(mid);
+  if(!canDeletePhoto(mid,ds,list.length)) return toast('마감 후에는 마지막 사진을 지울 수 없습니다. 관리자에게 요청해 주세요');
+  const remaining=list.filter(p=>p.id!==id).length;
+  const doIt=async()=>{
+    try{ await deleteDoc(doc(fs,'photos',id)); }catch(e){ return toast('삭제 실패 — 다시 시도해 주세요'); }
+    delete PHOTO[id]; paintPhotos();
+    if(await saveRec(mid,ds,{hasPhoto:remaining>0,photoCount:remaining})) toast('사진을 삭제했습니다');
+  };
+  if(remaining===0&&dowOf(ds)!==0) confirmBox('마지막 사진을 지우면 출석 인증이 취소됩니다. 계속할까요?',doIt);
+  else doIt();
 }
 function watchPhotos(ds){
   if(photoDate===ds) return;
   if(photoUnsub){ photoUnsub(); photoUnsub=null; }
-  photoDate=ds; PHOTO={};
+  photoDate=ds; PHOTO={}; photoReady=false;
   if(!ds||!fs) return;
   photoUnsub=onSnapshot(query(collection(fs,'photos'),where('date','==',ds)),snap=>{
-    const next={}; snap.forEach(d=>next[d.id]=d.data()); PHOTO=next; paintPhotos();
+    const next={}; snap.forEach(d=>next[d.id]=d.data()); PHOTO=next; photoReady=true; paintPhotos();
   },()=>{});
 }
 function paintPhotos(){
-  document.querySelectorAll('[data-ph]').forEach(el=>{
-    const p=PHOTO[el.dataset.ph];
-    if(p&&p.src) el.outerHTML=`<img class="thumb" src="${esc(p.src)}" alt="인증 사진" data-act="zoom" data-ph="${el.dataset.ph}">`;
+  document.querySelectorAll('[data-phbox]').forEach(box=>{
+    const mid=box.dataset.m, ds=box.dataset.d, list=photosOf(mid), r=recOf(mid,ds);
+    if(!list.length){
+      box.innerHTML=(r&&r.hasPhoto&&!photoReady)?`<div class="ph-empty">불러오는<br>중…</div>`:`<div class="ph-empty">사진<br>없음</div>`;
+      return;
+    }
+    const can=canDeletePhoto(mid,ds,list.length);
+    box.innerHTML=list.map(p=>`<div class="phitem"><img class="thumb" src="${esc(p.src)}" alt="인증 사진" data-act="zoom">${can?`<button class="phx" data-act="phdel" data-id="${esc(p.id)}" title="이 사진 삭제">✕</button>`:''}</div>`).join('');
+    box.querySelectorAll('[data-act="phdel"]').forEach(btn=>btn.onclick=e=>{ e.stopPropagation(); removePhoto(btn.dataset.id,mid,ds); });
   });
   document.querySelectorAll('[data-act="zoom"]').forEach(img=>img.onclick=()=>{
     const d=document.createElement('div'); d.className='modal';
@@ -602,17 +638,14 @@ function viewDay(ds){
         <span>${esc(s.n)}</span>${s.ex?`<span class="tag">제외</span>`:''}</label>`;
     });
 
-    const ph = hasPhoto
-      ? `<div class="ph-empty" data-ph="${k}">불러오는<br>중…</div>`
-      : `<div class="ph-empty">사진<br>없음</div>`;
+    const phbox=`<div class="phgrid" data-phbox="${k}" data-m="${m.id}" data-d="${ds}"></div>`;
 
     let ctrl='';
     if(canEdit){
-      ctrl+=`<label class="btn sm ghost" style="display:inline-block">${hasPhoto?'사진 교체':'사진 올리기'}
-        <input type="file" accept="image/*" class="hide" data-act="upload" data-m="${m.id}" data-d="${ds}"></label>`;
-      if(hasPhoto) ctrl+=`<button class="btn sm ghost" data-act="rm" data-m="${m.id}" data-d="${ds}">사진 빼기</button>`;
+      ctrl+=`<label class="btn sm ghost" style="display:inline-block">사진 올리기 <span class="muted small">(여러 장 가능)</span>
+        <input type="file" accept="image/*" multiple class="hide" data-act="upload" data-m="${m.id}" data-d="${ds}"></label>`;
     }else if(mine&&locked){
-      ctrl+=`<span class="lock">마감(익일 02:00) 이후에는 관리자만 변경할 수 있습니다</span>`;
+      ctrl+=`<span class="lock">마감(익일 02:00) 이후에는 사진을 추가할 수 없고, 마지막 1장은 지울 수 없습니다. 변경은 관리자에게 요청하세요</span>`;
     }
     if(isAdmin&&!isSun){
       const cur=(r&&r.override)||'';
@@ -632,7 +665,8 @@ function viewDay(ds){
         ${mine?'<span class="small muted">· 나</span>':''}
       </div>
       <div class="subs">${pills}</div>
-      <div class="photorow">${ph}${ctrl}</div></div>`;
+      <div class="photorow">${phbox}</div>
+      <div class="photorow">${ctrl}</div></div>`;
   });
   return html;
 }
@@ -719,10 +753,9 @@ function startCountdown(){
 function bindView(){
   const v=document.getElementById('view');
   v.querySelectorAll('[data-act="upload"]').forEach(el=>el.onchange=e=>{
-    const f=e.target.files&&e.target.files[0]; uploadPhoto(el.dataset.m,el.dataset.d,f); e.target.value='';
+    const fl=Array.from(e.target.files||[]); e.target.value='';
+    if(fl.length) uploadPhotos(el.dataset.m,el.dataset.d,fl);
   });
-  v.querySelectorAll('[data-act="rm"]').forEach(b=>b.onclick=()=>
-    confirmBox('사진을 빼면 출석 인증이 취소됩니다. 계속할까요?',()=>removePhoto(b.dataset.m,b.dataset.d)));
   v.querySelectorAll('[data-act="cancel"]').forEach(c=>c.onchange=()=>
     saveRec(c.dataset.m,c.dataset.d,{cancelled:{[c.dataset.n]:c.checked?true:false}}));
   v.querySelectorAll('[data-act="ovr"]').forEach(s=>s.onchange=()=>
