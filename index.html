@@ -109,6 +109,9 @@ ol.steps li{margin-bottom:10px}
 .phitem{position:relative}
 .phx{position:absolute;top:-7px;right:-7px;width:24px;height:24px;border-radius:50%;background:var(--red);color:#fff;font-size:11px;line-height:20px;text-align:center;border:2px solid var(--panel);padding:0}
 .mcard.me .phx{border-color:#161b26}
+.pastebox{min-height:40px;flex:1;min-width:210px;border:1px dashed var(--line);border-radius:10px;padding:9px 12px;color:var(--fg);font-size:12.5px;outline:none;-webkit-user-select:text;user-select:text;word-break:break-all}
+.pastebox:empty::before{content:attr(data-hint);color:var(--dim)}
+.pastebox:focus{border-color:var(--blue);background:#1a2030}
 .lock{font-size:11.5px;color:var(--dim)}
 
 .board{overflow-x:auto}
@@ -519,7 +522,7 @@ function paintPhotos(){
 // 다른 사람의 변경·타이머처럼 '배경에서 오는' 갱신용. 글자를 입력 중이거나 관리자 비밀번호 코드를 만드는 중이면 미뤄 둠
 function softRender(){
   const vw=document.getElementById('view'), ae=document.activeElement;
-  const typing=!!(ae&&vw&&vw.contains(ae)&&((ae.tagName==='INPUT'&&/^(text|password|date|search|number)$/.test(ae.type))||(ae.tagName==='TEXTAREA'&&!ae.readOnly)));
+  const typing=!!(ae&&vw&&vw.contains(ae)&&((ae.tagName==='INPUT'&&/^(text|password|date|search|number)$/.test(ae.type))||(ae.tagName==='TEXTAREA'&&!ae.readOnly)||ae.isContentEditable));
   const a1=document.getElementById('apw1'), a2=document.getElementById('apw2'), ao=document.getElementById('apwOut');
   const busy=!!(a1&&(a1.value||(a2&&a2.value)||(ao&&!ao.classList.contains('hide'))));
   if(typing||busy){ deferredRender=true; return; }
@@ -677,6 +680,8 @@ function viewDay(ds){
     if(canEdit){
       ctrl+=`<label class="btn sm ghost" style="display:inline-block">사진 올리기 <span class="muted small">(여러 장 가능)</span>
         <input type="file" accept="image/*" multiple class="hide" data-act="upload" data-m="${m.id}" data-d="${ds}"></label>`;
+      ctrl+=`<button class="btn sm ghost" data-act="pastebtn" data-m="${m.id}" data-d="${ds}">붙여넣기</button>`;
+      if(mine) ctrl+=`<div class="pastebox" contenteditable="true" spellcheck="false" autocapitalize="off" autocorrect="off" data-act="pastebox" data-hint="Ctrl+V로 사진 붙여넣기 · 휴대폰은 여기를 길게 눌러 ‘붙여넣기’"></div>`;
     }else if(mine&&locked){
       ctrl+=`<span class="lock">마감(익일 02:00) 이후에는 사진을 추가할 수 없고, 마지막 1장은 지울 수 없습니다. 변경은 관리자에게 요청하세요</span>`;
     }
@@ -804,6 +809,23 @@ function startCountdown(){
 
 function bindView(){
   const v=document.getElementById('view');
+  v.querySelectorAll('[data-act="pastebtn"]').forEach(b=>b.onclick=async()=>{
+    if(!navigator.clipboard||!navigator.clipboard.read) return toast('이 브라우저는 버튼 붙여넣기를 지원하지 않습니다. 옆 칸을 눌러 붙여넣어 주세요');
+    try{
+      const items=await navigator.clipboard.read(), files=[];
+      for(const it of items){
+        const t=it.types.find(x=>/^image\//.test(x));
+        if(t){ const blob=await it.getType(t); files.push(new File([blob],'pasted.'+(t.split('/')[1]||'png'),{type:t})); }
+      }
+      if(!files.length) return toast('클립보드에 사진이 없습니다. 사진을 먼저 복사해 주세요');
+      uploadPhotos(b.dataset.m,b.dataset.d,files);
+    }catch(err){ toast('붙여넣기가 허용되지 않았습니다. 옆 칸을 눌러 Ctrl+V(휴대폰은 길게 눌러 붙여넣기) 해 주세요'); }
+  });
+  v.querySelectorAll('[data-act="pastebox"]').forEach(box=>{
+    box.addEventListener('beforeinput',ev=>{ if(ev.inputType!=='insertFromPaste') ev.preventDefault(); });
+    box.addEventListener('keydown',ev=>{ if(!(ev.ctrlKey||ev.metaKey)&&(ev.key.length===1||ev.key==='Enter'||ev.key==='Backspace'||ev.key==='Delete')) ev.preventDefault(); });
+    box.addEventListener('input',()=>{ box.innerHTML=''; });
+  });
   v.querySelectorAll('[data-act="upload"]').forEach(el=>el.onchange=e=>{
     const fl=Array.from(e.target.files||[]); e.target.value='';
     if(fl.length) uploadPhotos(el.dataset.m,el.dataset.d,fl);
@@ -1007,6 +1029,26 @@ function initGate(){
   };
 }
 
+/* ---------- 클립보드 사진 붙여넣기 (Ctrl+V / 길게 눌러 붙여넣기) ---------- */
+function imagesFromClipboard(cd){
+  const out=[]; if(!cd) return out;
+  for(const it of (cd.items||[])){ if(it.kind==='file'&&/^image\//.test(it.type)){ const f=it.getAsFile(); if(f) out.push(f); } }
+  if(!out.length) for(const f of (cd.files||[])) if(/^image\//.test(f.type)) out.push(f);
+  return out;
+}
+document.addEventListener('paste',e=>{
+  if(document.getElementById('app').classList.contains('hide')) return;
+  const imgs=imagesFromClipboard(e.clipboardData);
+  if(!imgs.length){
+    if(e.target&&e.target.closest&&e.target.closest('[data-act="pastebox"]')){ e.preventDefault(); toast('사진만 붙여넣을 수 있습니다'); }
+    return;
+  }
+  e.preventDefault();
+  if(!me) return toast('참가자로 입장해야 사진을 올릴 수 있습니다');
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(tab)) return toast('요일 탭에서 붙여넣어 주세요');
+  if(isLocked(tab)) return toast('마감이 지나 사진을 추가할 수 없습니다');
+  uploadPhotos(me,tab,imgs);
+});
 document.addEventListener('focusout',()=>{ if(deferredRender){ deferredRender=false; setTimeout(softRender,60); } });
 
 /* ---------- 세션 복구 ---------- */
