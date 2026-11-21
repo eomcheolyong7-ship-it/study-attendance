@@ -242,7 +242,7 @@ service cloud.firestore {
         <button class="btn" id="regBtn">가입 신청</button>
         <button class="btn ghost" id="toLogin">돌아가기</button>
       </div>
-      <div class="small muted" style="margin-top:10px">신청하면 관리자가 승인한 뒤에 입장할 수 있습니다. 입장한 뒤 상단 <b>내 정보</b>에서 요일별 과목을 입력하세요.</div>
+      <div class="small muted" style="margin-top:10px">신청하면 관리자가 승인한 뒤에 입장할 수 있습니다. 입장하면 과목과 상관없이 날마다 공부 인증 사진을 올리면 됩니다.</div>
     </div>
     <div class="small" style="text-align:center;color:var(--dim);margin-top:14px">
       비밀번호는 출결 확인용 간단한 구분 장치입니다. 다른 곳에서 쓰는 비밀번호는 사용하지 마세요.
@@ -379,27 +379,32 @@ function toast(msg){
 const rkey=(mid,ds)=>mid+'__'+ds;
 const recOf=(mid,ds)=>REC[rkey(mid,ds)]||null;
 const memById=id=>MEM.find(m=>m.id===id)||null;
-function subjectsOf(m,ds){
-  const a=(m.subjects&&m.subjects[DAY_KEY[dowOf(ds)]])||[]; return Array.isArray(a)?a:[];
-}
-
 /* ---------- 상태 ---------- */
 function statusOf(m,ds){
-  const dow=dowOf(ds), r=recOf(m.id,ds), hasPhoto=!!(r&&r.hasPhoto);
-  if(dow===0) return {s:'none',label:hasPhoto?'사진 있음':'—'};
-  if(r&&r.override){
-    const map={present:'출석',absent:'결석',free:'공강'};
-    return {s:r.override,label:map[r.override]||r.override,ovr:true};
-  }
-  const active=subjectsOf(m,ds).filter(s=>s&&s.n&&!s.ex);
-  if(!active.length) return {s:'free',label:'공강',reason:'과목 없음'};
-  const cancelled=(r&&r.cancelled)||{};
-  if(!active.filter(s=>!cancelled[s.n]).length) return {s:'free',label:'공강',reason:'전 과목 휴강'};
-  if(hasPhoto) return {s:'present',label:'출석'};
+  const r=recOf(m.id,ds), hasPhoto=!!(r&&r.hasPhoto), ovr=r&&r.override;
+  if(ovr==='present') return {s:'present',label:'인증',ovr:true};
+  if(ovr==='none'||ovr==='absent') return {s:'none',label:'없음',ovr:true};
+  if(hasPhoto) return {s:'present',label:'인증'};
   if(Date.now()<deadlineOf(ds)) return {s:'wait',label:'미인증'};
-  return {s:'absent',label:'결석'};
+  return {s:'none',label:'없음'};
 }
-const isLocked=ds=>dowOf(ds)!==0&&Date.now()>=deadlineOf(ds)&&!isAdmin;
+const isLocked=ds=>Date.now()>=deadlineOf(ds)&&!isAdmin;
+/* 주간 판정: 한 주(월~일) 7일 중 5일 이상 인증하면 패스 */
+const WEEK_REQ=5;
+function weekResult(m,w){
+  const days=w.days.filter(inPeriod); if(!days.length) return null;
+  const n=days.length, req=Math.min(WEEK_REQ,n);
+  let present=0, left=0;
+  days.forEach(d=>{
+    const st=statusOf(m,d).s;
+    if(st==='present') present++; else if(st==='wait') left++;
+  });
+  let state='going';
+  if(present>=req) state='pass';
+  else if(present+left<req) state='fail';
+  return {state,present,req,n,left};
+}
+const WR_LABEL={pass:'패스',fail:'논패스',going:'진행 중'};
 
 /* ---------- 저장 ---------- */
 async function saveRec(mid,ds,patch){
@@ -451,11 +456,10 @@ function photosOf(mid){
     .map(([id,p])=>Object.assign({id},p))
     .sort((x,y)=>String(x.at||'').localeCompare(String(y.at||'')));
 }
-// 삭제 가능 여부: 관리자는 항상, 본인은 마감 전/일요일 자유, 마감 후에는 마지막 1장만 남겨 둠
+// 삭제 가능 여부: 관리자는 항상, 본인은 마감 전 자유, 마감 후에는 마지막 1장만 남겨 둠
 function canDeletePhoto(mid,ds,count){
   if(isAdmin) return true;
   if(mid!==me) return false;
-  if(dowOf(ds)===0) return true;
   if(Date.now()<deadlineOf(ds)) return true;
   return count>1;
 }
@@ -475,7 +479,7 @@ async function uploadPhotos(mid,ds,files){
   }
   if(!ok) return;
   paintPhotos();
-  if(await saveRec(mid,ds,{hasPhoto:true,photoCount:have+ok})) toast(dowOf(ds)===0?`사진 ${ok}장이 등록되었습니다`:'출석 인증 완료');
+  if(await saveRec(mid,ds,{hasPhoto:true,photoCount:have+ok})) toast('인증 완료');
 }
 async function removePhoto(id,mid,ds){
   const list=photosOf(mid);
@@ -486,7 +490,7 @@ async function removePhoto(id,mid,ds){
     delete PHOTO[id]; paintPhotos();
     if(await saveRec(mid,ds,{hasPhoto:remaining>0,photoCount:remaining})) toast('사진을 삭제했습니다');
   };
-  if(remaining===0&&dowOf(ds)!==0) confirmBox('마지막 사진을 지우면 출석 인증이 취소됩니다. 계속할까요?',doIt);
+  if(remaining===0) confirmBox('마지막 사진을 지우면 그날 인증이 취소됩니다. 계속할까요?',doIt);
   else doIt();
 }
 function watchPhotos(ds){
@@ -599,35 +603,39 @@ function viewBoard(){
   if(!ACT().length) return `<div class="card"><h3>전체 현황</h3><div class="muted small">참가자가 없습니다.</div></div>`;
   if(!ws.length) return `<div class="card"><h3>전체 현황</h3><div class="muted small">관리자가 스터디 기간을 설정하면 현황표가 표시됩니다.</div></div>`;
   const today=todayKST(), tot={};
-  ACT().forEach(m=>tot[m.id]={present:0,absent:0,free:0});
-  dateRange().filter(d=>dowOf(d)!==0).forEach(d=>ACT().forEach(m=>{
-    const s=statusOf(m,d).s; if(tot[m.id][s]!==undefined) tot[m.id][s]++;
+  ACT().forEach(m=>tot[m.id]={present:0,pass:0,fail:0});
+  dateRange().forEach(d=>ACT().forEach(m=>{
+    if(statusOf(m,d).s==='present') tot[m.id].present++;
   }));
+  ws.forEach(w=>ACT().forEach(m=>{ const r=weekResult(m,w); if(r&&(r.state==='pass'||r.state==='fail')) tot[m.id][r.state]++; }));
   let sum=`<div class="card"><h3>누적 집계 <span class="muted small" style="font-weight:400">· 참가자 ${ACT().length}명 · ${ws.length}주</span></h3>
-    <div class="board"><table class="bd"><thead><tr><th class="nm">참가자</th><th>출석</th><th>결석</th><th>공강</th></tr></thead><tbody>`;
+    <div class="board"><table class="bd"><thead><tr><th class="nm">참가자</th><th>인증한 날</th><th>패스 주</th><th>논패스 주</th></tr></thead><tbody>`;
   ACT().forEach(m=>{
     sum+=`<tr><td class="nm"><b>${labelHtml(m)}</b></td>
       <td><b style="color:var(--green)">${tot[m.id].present}</b></td>
-      <td><b style="color:var(--red)">${tot[m.id].absent}</b></td>
-      <td><b style="color:var(--blue)">${tot[m.id].free}</b></td></tr>`;
+      <td><b style="color:var(--blue)">${tot[m.id].pass}</b></td>
+      <td><b style="color:var(--red)">${tot[m.id].fail}</b></td></tr>`;
   });
   sum+=`</tbody></table></div></div>`;
 
   let blocks='';
   ws.forEach(w=>{
-    const days=w.days.filter(d=>inPeriod(d)&&dowOf(d)!==0);
+    const days=w.days.filter(d=>inPeriod(d));
     if(!days.length) return;
     const isCur=inPeriod(today)&&mondayOf(today)===w.start;
     let head=`<th class="nm">참가자</th>`;
     days.forEach(d=>head+=`<th${d===today?' style="color:var(--fg);font-weight:700"':''}>${DAY_KO[dowOf(d)]}<br><span style="font-size:10px;opacity:.7">${mmdd(d)}</span></th>`);
+    head+=`<th>주간</th>`;
     let rows='';
     ACT().forEach(m=>{
       let tds=`<td class="nm">${labelHtml(m)}</td>`;
       days.forEach(d=>{
         const st=statusOf(m,d);
-        const sym={present:'출',absent:'결',free:'공',wait:'·',none:''}[st.s]||'';
+        const sym={present:'인',wait:'·'}[st.s]||'';
         tds+=`<td><span class="cell c-${st.s}" title="${mmdd(d)} ${st.label}">${sym}</span></td>`;
       });
+      const wr=weekResult(m,w);
+      tds+=`<td><span class="badge b-${wr.state==='pass'?'present':wr.state==='fail'?'absent':'wait'}" style="white-space:nowrap"><i></i>${WR_LABEL[wr.state]} ${wr.present}/${wr.req}</span></td>`;
       rows+=`<tr>${tds}</tr>`;
     });
     blocks+=`<div class="wkblock ${isCur?'cur':''}">
@@ -635,44 +643,29 @@ function viewBoard(){
       <div class="board"><table class="bd"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div></div>`;
   });
 
-  return sum+`<div class="card"><h3>주별 출결</h3>${blocks}
+  return sum+`<div class="card"><h3>주별 인증 현황</h3>${blocks}
     <div class="legend">
-      <span><span class="cell c-present">출</span> 출석(사진 인증)</span>
-      <span><span class="cell c-absent">결</span> 결석(기한 초과)</span>
-      <span><span class="cell c-free">공</span> 공강(전 과목 휴강·과목 없음)</span>
-      <span><span class="cell c-wait">·</span> 인증 대기(기한 전)</span>
+      <span><span class="cell c-present">인</span> 인증 완료</span>
+      <span><span class="cell c-wait">·</span> 아직 기한 전</span>
+      <span><span class="cell c-none"></span> 인증 없음</span>
     </div>
-    <div class="sumrow" style="margin-top:10px">일요일은 출결 집계에서 제외됩니다. 기한은 각 요일 <b>익일 02:00</b>입니다.</div></div>`;
+    <div class="sumrow" style="margin-top:10px">과목과 상관없이 날마다 공부 인증 사진을 올립니다. 한 주(월~일) 7일 중 <b>5일 이상</b> 인증하면 그 주는 <b>패스</b>입니다. 인증하지 못한 날은 그냥 인증 없음으로 두고, 주 단위 패스·논패스만 봅니다. 각 날짜의 업로드 기한은 <b>익일 02:00</b>입니다.</div></div>`;
 }
 
 function viewDay(ds){
-  const dow=dowOf(ds), isSun=dow===0, locked=isLocked(ds);
-  let html='';
-  if(!isSun){
-    html+=`<div class="cd"><div>
-      <div class="lab">${mmdd(ds)} (${DAY_KO[dow]}) 사진 업로드 마감까지</div>
+  const dow=dowOf(ds), locked=isLocked(ds);
+  const wk=weeks().find(w=>w.days.includes(ds));
+  let html=`<div class="cd"><div>
+      <div class="lab">${mmdd(ds)} (${DAY_KO[dow]}) 인증 사진 업로드 마감까지</div>
       <div class="clock" id="cdClock">--:--:--</div></div>
       <div class="spacer"></div>
       <div class="due">마감 ${mmdd(addDays(ds,1))} 02:00<br><span id="cdNote" class="muted"></span></div></div>`;
-  }else{
-    html+=`<div class="card"><h3>${mmdd(ds)} (일)</h3><div class="muted small">일요일은 출결·공강을 집계하지 않습니다. 사진은 자유롭게 올릴 수 있습니다.</div></div>`;
-  }
   if(!ACT().length) return html+`<div class="card muted small">참가자가 없습니다.</div>`;
 
   [...ACT()].sort((a,b)=>(a.id===me?-1:b.id===me?1:0)).forEach(m=>{
-    const st=statusOf(m,ds), r=recOf(m.id,ds), subs=subjectsOf(m,ds);
-    const cancelled=(r&&r.cancelled)||{}, mine=m.id===me, canEdit=(mine&&!locked)||isAdmin;
+    const st=statusOf(m,ds), r=recOf(m.id,ds), wr=wk?weekResult(m,wk):null;
+    const mine=m.id===me, canEdit=(mine&&!locked)||isAdmin;
     const k=rkey(m.id,ds), hasPhoto=!!(r&&r.hasPhoto);
-
-    let pills='';
-    if(!subs.length) pills=`<span class="nos">등록된 과목이 없습니다${mine?' — 상단 내 정보에서 추가':''}</span>`;
-    else subs.forEach(s=>{
-      if(!s||!s.n) return;
-      const off=!!cancelled[s.n];
-      pills+=`<label class="sub-pill ${s.ex?'ex':''} ${off?'off':''}">
-        <input type="checkbox" data-act="cancel" data-m="${m.id}" data-d="${ds}" data-n="${esc(s.n)}" ${off?'checked':''} ${(canEdit&&!s.ex&&!isSun)?'':'disabled'}>
-        <span>${esc(s.n)}</span>${s.ex?`<span class="tag">제외</span>`:''}</label>`;
-    });
 
     const phbox=`<div class="phgrid" data-phbox="${k}" data-m="${m.id}" data-d="${ds}"></div>`;
 
@@ -685,23 +678,22 @@ function viewDay(ds){
     }else if(mine&&locked){
       ctrl+=`<span class="lock">마감(익일 02:00) 이후에는 사진을 추가할 수 없고, 마지막 1장은 지울 수 없습니다. 변경은 관리자에게 요청하세요</span>`;
     }
-    if(isAdmin&&!isSun){
+    if(isAdmin){
       const cur=(r&&r.override)||'';
       ctrl+=`<select class="sel" data-act="ovr" data-m="${m.id}" data-d="${ds}">
         <option value="" ${cur===''?'selected':''}>자동 판정</option>
-        <option value="present" ${cur==='present'?'selected':''}>출석으로 지정</option>
-        <option value="absent" ${cur==='absent'?'selected':''}>결석으로 지정</option>
-        <option value="free" ${cur==='free'?'selected':''}>공강으로 지정</option></select>`;
+        <option value="present" ${cur==='present'?'selected':''}>인증으로 지정</option>
+        <option value="none" ${(cur==='none'||cur==='absent')?'selected':''}>인증 없음으로 지정</option>
+      </select>`;
     }
 
     html+=`<div class="mcard ${mine?'me':''}">
       <div class="mhead">
         <span class="mname">${labelHtml(m)}</span>
         <span class="badge b-${st.s} ${st.ovr?'ovr':''}"><i></i>${st.label}</span>
-        ${st.reason?`<span class="small muted">${st.reason}</span>`:''}
+        ${wr?`<span class="small muted">이번 주 ${wr.present}/${wr.req}일 · ${WR_LABEL[wr.state]}</span>`:''}
         ${mine?'<span class="small muted">· 나</span>':''}
       </div>
-      <div class="subs">${pills}</div>
       <div class="photorow">${phbox}</div>
       <div class="photorow">${ctrl}</div></div>`;
   });
@@ -711,22 +703,6 @@ function viewDay(ds){
 function viewMe(){
   const m=memById(me);
   if(!m) return `<div class="card muted">관리자 전용 모드로 입장했습니다. 개인 정보는 참가자 계정으로 입장해 수정하세요.</div>`;
-  let days='';
-  for(let d=1;d<=6;d++){
-    const key=DAY_KEY[d], arr=(m.subjects&&m.subjects[key])||[];
-    let rows='';
-    arr.forEach((s,i)=>{
-      rows+=`<div class="srow">
-        <input type="text" value="${esc(s.n||'')}" placeholder="과목명" data-act="subname" data-k="${key}" data-i="${i}">
-        <button class="exbtn ${s.ex?'on':''}" data-act="subex" data-k="${key}" data-i="${i}" title="제외하면 출결 판정에서 무시됩니다">${s.ex?'제외됨':'제외'}</button>
-        <button class="delx" data-act="subdel" data-k="${key}" data-i="${i}">✕</button></div>`;
-    });
-    if(!arr.length) rows=`<div class="muted small">과목 없음 — 이 요일은 공강으로 처리됩니다</div>`;
-    days+=`<div class="dayblock">
-      <div class="dh"><b>${DAY_KO[d]}요일</b><span class="muted small">${arr.filter(s=>s.n&&!s.ex).length}과목 집계</span></div>
-      <div class="sgrid">${rows}</div>
-      <button class="addsub" data-act="subadd" data-k="${key}">+ 과목 추가</button></div>`;
-  }
   return `<div class="card"><h3>내 정보</h3>
     <div class="row">
       <div style="flex:1;min-width:150px"><label class="fl">이름</label><input type="text" id="meName" value="${esc(m.name)}"></div>
@@ -736,11 +712,7 @@ function viewMe(){
       <button class="btn sm" id="meSave">이름·별명 저장</button>
       <button class="btn sm ghost" id="mePw">비밀번호 변경</button>
     </div>
-    <div class="muted small" style="margin-top:10px">언제든 다시 들어와 수정할 수 있습니다. 다른 참가자에게는 별명이 있으면 별명만 보이고, 관리자에게는 실제 이름도 함께 보입니다.</div></div>
-  <div class="card"><h3>수강 과목 (월~토)</h3>
-    <div class="muted small" style="margin-bottom:12px"><b>제외</b>를 누르면 적어 둔 채로 출결 판정에서 무시됩니다.
-      집계 과목이 하나도 없는 요일은 자동 공강이 됩니다. 과목명은 입력하는 즉시 저장됩니다.</div>
-    ${days}</div>`;
+    <div class="muted small" style="margin-top:10px">언제든 다시 들어와 수정할 수 있습니다. 다른 참가자에게는 별명이 있으면 별명만 보이고, 관리자에게는 실제 이름도 함께 보입니다.</div></div>`;
 }
 
 function viewAdmin(){
@@ -783,7 +755,7 @@ function viewAdmin(){
     <div class="row" style="margin-top:12px"><button class="btn sm" id="cSave">기간·이름 저장</button></div>
     <div class="muted small" style="margin-top:10px">기간은 월요일 시작 기준으로 주 단위로 나뉘어 표시됩니다.</div></div>
   <div class="card"><h3>출결 변경 권한</h3>
-    <div class="muted small">요일 탭의 각 참가자 카드에서 <b>자동 판정 / 출석 / 결석 / 공강</b>을 직접 지정할 수 있습니다.
+    <div class="muted small">요일 탭의 각 참가자 카드에서 <b>자동 판정 / 인증 / 인증 없음</b>을 직접 지정할 수 있습니다.
     마감이 지난 날짜의 사진도 관리자 모드에서는 올리고 뺄 수 있습니다.</div></div>
   ${apwCard}<div class="card"><h3>계정 관리 <span class="muted small" style="font-weight:400">· ${ACT().length}명</span></h3>
     ${rows||'<div class="muted small">참가자가 없습니다.</div>'}
@@ -798,7 +770,7 @@ function startCountdown(){
     const el=document.getElementById('cdClock'); if(!el){ clearInterval(cdTimer); return; }
     const note=document.getElementById('cdNote'), ms=dl-Date.now();
     if(ms<=0){ el.textContent='마감되었습니다'; el.className='clock over';
-      if(note) note.textContent='미인증자는 결석 처리'; return; }
+      if(note) note.textContent='미인증일은 인증 없음으로 남습니다'; return; }
     const h=Math.floor(ms/36e5), mi=Math.floor(ms%36e5/6e4), s=Math.floor(ms%6e4/1000);
     el.textContent=`${String(h).padStart(2,'0')}:${String(mi).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
     el.className='clock'+(ms<36e5?' warn':'');
@@ -830,8 +802,6 @@ function bindView(){
     const fl=Array.from(e.target.files||[]); e.target.value='';
     if(fl.length) uploadPhotos(el.dataset.m,el.dataset.d,fl);
   });
-  v.querySelectorAll('[data-act="cancel"]').forEach(c=>c.onchange=()=>
-    saveRec(c.dataset.m,c.dataset.d,{cancelled:{[c.dataset.n]:c.checked?true:false}}));
   v.querySelectorAll('[data-act="ovr"]').forEach(s=>s.onchange=()=>
     saveRec(s.dataset.m,s.dataset.d,{override:s.value||null}));
 
@@ -846,25 +816,6 @@ function bindView(){
   };
   const pw=document.getElementById('mePw');
   if(pw&&m) pw.onclick=()=>pwChangeBox(m);
-
-  if(m){
-    v.querySelectorAll('[data-act="subadd"]').forEach(b=>b.onclick=async()=>{
-      const k=b.dataset.k; m.subjects=m.subjects||{}; m.subjects[k]=m.subjects[k]||[];
-      m.subjects[k].push({n:'',ex:false}); await saveMember(m); render();
-    });
-    v.querySelectorAll('[data-act="subdel"]').forEach(b=>b.onclick=async()=>{
-      m.subjects[b.dataset.k].splice(+b.dataset.i,1); await saveMember(m); render();
-    });
-    v.querySelectorAll('[data-act="subex"]').forEach(b=>b.onclick=async()=>{
-      const s=m.subjects[b.dataset.k][+b.dataset.i]; s.ex=!s.ex; await saveMember(m); render();
-    });
-    let t=null;
-    v.querySelectorAll('[data-act="subname"]').forEach(inp=>{
-      inp.oninput=()=>{ m.subjects[inp.dataset.k][+inp.dataset.i].n=inp.value;
-        clearTimeout(t); t=setTimeout(()=>saveMember(m),700); };
-      inp.onblur=()=>{ clearTimeout(t); saveMember(m); };
-    });
-  }
 
   v.querySelectorAll('[data-act="aok"]').forEach(b=>b.onclick=async()=>{
     const t=memById(b.dataset.m); if(!t) return;
@@ -1010,7 +961,7 @@ function initGate(){
     if(!p1||p1.length<4){ e2.textContent='비밀번호는 4자 이상'; return; }
     if(p1!==p2){ e2.textContent='비밀번호가 일치하지 않습니다'; return; }
     if(await verifyAdmin(p1)){ e2.textContent='사용할 수 없는 비밀번호입니다'; return; }
-    const m={id:uid(),name,nickname:nick,pw:await sha(p1),subjects:{mon:[],tue:[],wed:[],thu:[],fri:[],sat:[]},approved:false,createdAt:new Date().toISOString()};
+    const m={id:uid(),name,nickname:nick,pw:await sha(p1),approved:false,createdAt:new Date().toISOString()};
     if(!await saveMember(m)){ e2.textContent='신청에 실패했습니다 (Firestore 규칙을 확인해 주세요)'; return; }
     ['rName','rNick','rPw','rPw2'].forEach(id=>{ document.getElementById(id).value=''; });
     document.getElementById('regCard').classList.add('hide');
